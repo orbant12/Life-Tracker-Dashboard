@@ -41,7 +41,7 @@ async function getAllWeeks() {
 /**
  * Calculate the daily deficit (matching today's date in "YYYY / MM / DD" format).
  */
-function getDailyStats(data) {
+function getDailyStats(data, typeString) {
   const today = new Date();
   const year = today.getFullYear();
   const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -54,7 +54,7 @@ function getDailyStats(data) {
     if (dayProp && Array.isArray(dayProp.title)) {
       dayProp.title.forEach((titleObj) => {
         if (titleObj.plain_text === dayToMatch) {
-          const deficitProperty = page.properties['Deficit'];
+          const deficitProperty = page.properties[typeString];
           if (deficitProperty && typeof deficitProperty.number === 'number') {
             totalDeficit += deficitProperty.number;
           }
@@ -113,13 +113,29 @@ app.get('/api/deficits', async (req, res) => {
       page_size: 100, // adjust if needed
     });
 
-    const dailyDeficit = getDailyStats(response);
+    const dailyDeficit = getDailyStats(response, 'Deficit');
     let weeklyDeficit = 0;
     if (selectedWeek) {
       weeklyDeficit = getWeeklyStats(response, selectedWeek);
     }
 
     res.json({ dailyDeficit, weeklyDeficit });
+  } catch (err) {
+    console.error('Error fetching deficits:', err);
+    res.status(500).json({ error: 'Error fetching deficits' });
+  }
+});
+
+app.get('/api/calories', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    const dailyCal= getDailyStats(response, 'Calories');
+
+    res.json({ dailyCal });
   } catch (err) {
     console.error('Error fetching deficits:', err);
     res.status(500).json({ error: 'Error fetching deficits' });

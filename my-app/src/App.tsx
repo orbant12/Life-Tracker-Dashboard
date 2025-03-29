@@ -6,33 +6,46 @@ import SideNav from './sideNav';
 import '././css/sidenav.css';
 import DeficitStats from './pages/deficit';
 
-// Define the NavItem type
+// Define the NavItem type with optional children for dropdown items
 interface NavItem {
   path: string;
   label: string;
   icon?: React.ReactNode;
+  children?: NavItem[];
 }
 
 function App() {
-  // Define navigation items
+  // Define navigation items with children for Nutrition dropdown
   const navItems: NavItem[] = [
     { path: '/', label: 'Home', icon: '🏠' },
-    { path: '/dashboard', label: 'Dashboard', icon: '📊' },
+    { 
+      path: '/nutrition', 
+      label: 'Nutrition', 
+      icon: '🍏',
+      children: [
+        { path: '/nutrition/meals', label: '+ Log New' },
+        { path: '/nutrition/tracking', label: 'Tracking' },
+        { path: '/nutrition/recipes', label: 'Recipes' }
+      ] 
+    },
     { path: '/profile', label: 'Profile', icon: '👤' },
     { path: '/settings', label: 'Settings', icon: '⚙️' },
   ];
 
   return (
     <Router>
-      <div className="flex flex-row w-[100%]">
+      <div className="flex flex-row w-full h-[100vh]">
         <SideNav navItems={navItems} />
         <main className="content">
           <Routes>
-            <Route path="/s" element={<Home />} />
+            <Route path="/" element={<Home />} />
             <Route path="/dashboard" element={<div>Dashboard Page</div>} />
+            <Route path="/nutrition/meals" element={<div>Meal Planning Page</div>} />
+            <Route path="/nutrition/macros" element={<div>Macro Tracking Page</div>} />
+            <Route path="/nutrition/recipes" element={<div>Recipes Page</div>} />
             <Route path="/profile" element={<div>Profile Page</div>} />
             <Route path="/settings" element={<div>Settings Page</div>} />
-            <Route path='/' element={ <DeficitStats /> } />
+            <Route path='/nutrition/tracking' element={<DeficitStats />} />
           </Routes>
         </main>
       </div>
