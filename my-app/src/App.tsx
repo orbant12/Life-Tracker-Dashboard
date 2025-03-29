@@ -5,6 +5,7 @@ import { Home } from './pages/home';
 import SideNav from './sideNav';
 import '././css/sidenav.css';
 import DeficitStats from './pages/deficit';
+import LogNew  from './pages/addNew';
 
 // Define the NavItem type with optional children for dropdown items
 interface NavItem {
@@ -23,7 +24,7 @@ function App() {
       label: 'Nutrition', 
       icon: '🍏',
       children: [
-        { path: '/nutrition/meals', label: '+ Log New' },
+        { path: '/nutrition/lognew', label: '+ Log New' },
         { path: '/nutrition/tracking', label: 'Tracking' },
         { path: '/nutrition/recipes', label: 'Recipes' }
       ] 
@@ -40,7 +41,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/dashboard" element={<div>Dashboard Page</div>} />
-            <Route path="/nutrition/meals" element={<div>Meal Planning Page</div>} />
+            <Route path="/nutrition/lognew" element={ <LogNew /> } />
             <Route path="/nutrition/macros" element={<div>Macro Tracking Page</div>} />
             <Route path="/nutrition/recipes" element={<div>Recipes Page</div>} />
             <Route path="/profile" element={<div>Profile Page</div>} />
