@@ -1,11 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import BasicPie from '../components/pie';
-import NoFoodIcon from '@mui/icons-material/NoFood';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
 
 // Define types
-type ViewOption = 'today' | 'weekly' | 'both';
+type ViewOption = 'food' | 'weight' | 'exercise';
 type Week = string;
 
 interface DeficitData {
@@ -16,10 +13,80 @@ interface DeficitData {
 const LogNew = () => {
   // State
   
-    const [modalToggle, setModalToggle] = useState(false);    
-    
-    const [activeIcon, setActiveIcon] = useState<IconType>('meets');
+    const [viewOption, setViewOption] = useState<ViewOption>('food');
+   
   
+
+
+
+
+return (
+// make it to be on the top of the page
+    <div className="flex flex-col mx-auto px-0 py-4 rounded shadow-lg bg-gray-100 px-12 h-[100%] mt-[-30px] ">
+      
+        {/* Toggle View Options */}
+        <ViewToggle 
+        viewOption={viewOption}
+        onChange={setViewOption}
+        />
+        
+
+        { viewOption == 'food' &&
+            <FoodPanel />
+        }
+
+        { viewOption == 'weight' &&
+            <WeightPanel />
+        }
+
+        { viewOption == 'exercise' &&
+            <ExercisePanel />
+        }
+
+    </div>
+  );
+};
+
+export default LogNew;
+
+const FoodList = ({ foodData, handleLogAmmount, modalToggle,setModalToggle }) => {
+    // Sample data if none is provided
+  
+    return (
+      <div className="w-full overflow-hidden border-2 border-gray-200 rounded-lg overflow-y-scroll">
+        {/* Table Header */}
+        <div className="bg-gray-50">
+          <div className="grid grid-cols-7 border-b-2 border-gray-200">
+            <div className="p-4 font-semibold">Amount</div>
+            <div className="p-4 font-semibold">Food</div>
+            <div className="p-4 font-semibold">Calories</div>
+            <div className="p-4 font-semibold">Protein</div>
+            <div className="p-4 font-semibold">Fats</div>
+            <div className="p-4 font-semibold">Carbs</div>
+            <div className="p-4 font-semibold"></div>
+          </div>
+        </div>
+        
+        {/* Table Body */}
+        <BasicModal handleLogAmmount={handleLogAmmount} foodData={foodData} />
+
+      </div>
+    );
+  };
+  
+
+import { LuMilk } from "react-icons/lu";
+import { GiTomato } from "react-icons/gi";
+import { TbAppleFilled } from "react-icons/tb";
+import { GiMeatCleaver } from "react-icons/gi";
+import { BiSolidBowlRice } from "react-icons/bi";
+import { GiChocolateBar } from "react-icons/gi";
+import BasicModal from '../components/modal';
+
+
+const FoodPanel = ({
+    
+}) => {
     const meetsData = [
         {
         amount: '1',
@@ -197,100 +264,199 @@ const LogNew = () => {
         }
     ];
 
+    const [modalToggle, setModalToggle] = useState(false); 
+    const [activeIcon, setActiveIcon] = useState<IconType>('meets');   
+
     const handleLogAmmount = (data) => {
         setModalToggle(!modalToggle)
     }
 
-  return (
-    // make it to be on the top of the page
-    <div className="flex flex-col mx-auto px-0 py-4 rounded shadow-lg bg-gray-100 px-12 h-[100%] mt-[-30px] ">
+    return(
+        <>
+        <BottomContainer 
+            activeIcon={activeIcon}
+            setActiveIcon={setActiveIcon}
+        />
+        { activeIcon == "meets" &&
+            <div className='flex flex-col items-center w-[100%] overflow-y-scroll bg-white rounded-lg h-[77%]'>
       
-      {/* Toggle View Options */}
+                  <FoodList 
+                    foodData={meetsData}
+                    handleLogAmmount={handleLogAmmount}
+                    setModalToggle={setModalToggle}
+                    modalToggle={modalToggle}
+                  />
+    
+            </div>      
+          }
+    
+        { activeIcon == "veggies" &&
+            <div className='flex flex-col items-center w-[100%] overflow-y-scroll bg-white rounded-lg h-[77%]'>
+      
+                  <FoodList 
+                    foodData={veggiesData}
+                    handleLogAmmount={handleLogAmmount}
+                    modalToggle={modalToggle}
+                    setModalToggle={setModalToggle}
+                  />
+    
+            </div>      
+          }
+    
+        { activeIcon == "fruits" &&
+            <div className='flex flex-col items-center w-[100%] overflow-y-scroll bg-white rounded-lg h-[77%]'>
+      
+                  <FoodList 
+                    foodData={fruitsData}
+                    handleLogAmmount={handleLogAmmount}
+                    modalToggle={modalToggle}
+                    setModalToggle={setModalToggle}
+                  />
+    
+            </div>      
+          }
+          </>
+    )
+}
 
-      {/* Bottom container with rounded bottom corners only */}
-      <BottomContainer 
-        activeIcon={activeIcon}
-        setActiveIcon={setActiveIcon}
-      />
 
-      { activeIcon == "meets" &&
-        <div className='flex flex-col items-center w-[100%] overflow-y-scroll bg-white rounded-lg h-[77%]'>
+import { TrendingUp, TrendingDown, Scale, Target, ArrowRight, Zap } from 'lucide-react';
+import ExercisePanel from '../components/exercisePanel';
+
+const WeightPanel = () => {
+  const [weight, setWeight] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+  const [feeling, setFeeling] = useState<any>(null);
   
-              <FoodList 
-                foodData={meetsData}
-                handleLogAmmount={handleLogAmmount}
-                setModalToggle={setModalToggle}
-                modalToggle={modalToggle}
-              />
-
-        </div>      
-      }
-
-    { activeIcon == "veggies" &&
-        <div className='flex flex-col items-center w-[100%] overflow-y-scroll bg-white rounded-lg h-[77%]'>
+  const feelings = [
+    { emoji: '💩', label: 'Poop', color: 'bg-amber-50 border-amber-200' },
+    { emoji: '💨', label: 'Bloated', color: 'bg-red-50 border-gray-200' },
+    { emoji: '🌊', label: 'Watery', color: 'bg-blue-50 border-blue-200' },
+    { emoji: '😴', label: 'Bad Sleep', color: 'bg-purple-50 border-purple-200' }
+  ];
   
-              <FoodList 
-                foodData={veggiesData}
-                handleLogAmmount={handleLogAmmount}
-                modalToggle={modalToggle}
-                setModalToggle={setModalToggle}
-              />
-
-        </div>      
-      }
-
-    { activeIcon == "fruits" &&
-        <div className='flex flex-col items-center w-[100%] overflow-y-scroll bg-white rounded-lg h-[77%]'>
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (weight && feeling !== null) {
+      setSubmitted(true);
+      // Here you would typically save to a database
+      setTimeout(() => {
+        setSubmitted(false);
+        setWeight('');
+        setFeeling(null);
+      }, 3000);
+    }
+  };
   
-              <FoodList 
-                foodData={fruitsData}
-                handleLogAmmount={handleLogAmmount}
-                modalToggle={modalToggle}
-                setModalToggle={setModalToggle}
+  const today = new Date().toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+  
+  return (
+    <div className="w-full bg-white to-indigo-50 p-6 rounded-xl shadow-lg">
+      <div className="max-w-2xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-gray-800"></h1>
+          <div className="flex items-center space-x-2 bg-white px-4 py-2 rounded-lg shadow">
+            <Scale size={18} className="text-indigo-600" />
+            <span className="font-semibold text-gray-700">{today}</span>
+          </div>
+        </div>
+        
+        {/* Feelings Icons */}
+        <div className="grid grid-cols-4 gap-4 mb-8">
+          {feelings.map((item, index) => (
+            <div
+              key={index}
+              onClick={() => {feeling == index ? setFeeling(null) : setFeeling(index)}}
+              className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
+                feeling === index 
+                  ? 'border-indigo-500 shadow-md transform scale-105' 
+                  : `border-gray-200 ${item.color}`
+              }`}
+            >
+              <span className="text-4xl mb-2">{item.emoji}</span>
+              <span className="font-medium text-gray-700">{item.label}</span>
+            </div>
+          ))}
+        </div>
+        
+        {/* Weight Input */}
+        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-md mb-6">
+          <div className="flex flex-col">
+            <div className="relative">
+              <input
+                type="number"
+                step="0.1"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                placeholder="Enter your weight"
+                className="w-full p-4 text-2xl font-bold text-center text-indigo-600 border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
               />
-
-        </div>      
-      }
-
+              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
+                kg
+              </div>
+            </div>
+          </div>
+          
+          <div className="mt-6 flex justify-between items-center">
+            
+            <div
+              className={`flex w-[100%] items-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
+                !weight || feeling === null
+                  ? 'bg-gray-300 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
+            >
+              <span className='text-center' >Log Weight</span>
+              <ArrowRight size={16} />
+            </div>
+          </div>
+        </form>
+        
+        {/* Confirmation Message */}
+        {submitted && (
+          <div className="bg-green-100 border-l-4 border-green-500 p-4 rounded-lg animate-pulse">
+            <div className="flex items-center">
+              <Zap size={24} className="text-green-500 mr-3" />
+              <p className="text-green-700">
+                Weight logged successfully! Keep up the great work.
+              </p>
+            </div>
+          </div>
+        )}
+        
+        {/* Progress Indicators */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <TrendingDown size={18} className="text-green-500" />
+                <span className="font-medium text-gray-700">Weekly Change</span>
+              </div>
+              <span className="text-lg font-bold text-green-500">-1 kg</span>
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Target size={18} className="text-indigo-500" />
+                <span className="font-medium text-gray-700">Goal Distance</span>
+              </div>
+              <span className="text-lg font-bold text-indigo-500">72 kg</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default LogNew;
 
-const FoodList = ({ foodData, handleLogAmmount, modalToggle,setModalToggle }) => {
-    // Sample data if none is provided
-  
-    return (
-      <div className="w-full overflow-hidden border-2 border-gray-200 rounded-lg overflow-y-scroll">
-        {/* Table Header */}
-        <div className="bg-gray-50">
-          <div className="grid grid-cols-7 border-b-2 border-gray-200">
-            <div className="p-4 font-semibold">Amount</div>
-            <div className="p-4 font-semibold">Food</div>
-            <div className="p-4 font-semibold">Calories</div>
-            <div className="p-4 font-semibold">Protein</div>
-            <div className="p-4 font-semibold">Fats</div>
-            <div className="p-4 font-semibold">Carbs</div>
-            <div className="p-4 font-semibold"></div>
-          </div>
-        </div>
-        
-        {/* Table Body */}
-        <BasicModal handleLogAmmount={handleLogAmmount} foodData={foodData} />
 
-      </div>
-    );
-  };
-  
-
-import { LuMilk } from "react-icons/lu";
-import { GiTomato } from "react-icons/gi";
-import { TbAppleFilled } from "react-icons/tb";
-import { GiMeatCleaver } from "react-icons/gi";
-import { BiSolidBowlRice } from "react-icons/bi";
-import { GiChocolateBar } from "react-icons/gi";
-import BasicModal from '../components/modal';
 
 // Define types
 type IconType = 'meets' | 'fruits' | 'veggies' | 'dairy' | 'carbs' | 'treats';
@@ -371,9 +537,9 @@ interface ViewToggleProps {
 const ViewToggle: React.FC<ViewToggleProps> = ({ viewOption, onChange }) => {
   // Options for the toggle
   const options: { value: ViewOption; label: string }[] = [
-    { value: 'today', label: 'Today' },
-    { value: 'weekly', label: 'Weekly' },
-    { value: 'both', label: 'Both' }
+    { value: 'food', label: 'Food' },
+    { value: 'weight', label: 'Weight' },
+    { value: 'exercise', label: 'Exercise' }
   ];
 
   // Handle option change

@@ -46,16 +46,21 @@ export default function BasicModal({foodData, handleLogAmmount}) {
 
   const handleAddNew = async () => {
 
-    const response = await fetch('/api/nutrition', {
+    const serving = isPiece ? "piece" : "g"
+
+    const response = await fetch('/api/foods', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          name: nameTitle,
           calories: addedCal,
           protein: addedProtein,
           carbs: addedCarbs,
           fats: addedFats,
+          servingSize: amount,
+          servingUnit: serving
         }),
       });
 

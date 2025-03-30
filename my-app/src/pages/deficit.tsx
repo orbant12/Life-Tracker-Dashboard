@@ -293,7 +293,7 @@ const Widget_2 = ({ dailyDeficit, title, notionData}) => {
 }
 
 
-import RestaurantIcon from '@mui/icons-material/Restaurant';
+
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import PermMediaIcon from '@mui/icons-material/PermMedia';
