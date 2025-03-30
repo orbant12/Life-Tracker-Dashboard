@@ -6,6 +6,15 @@ const { Client } = require('@notionhq/client');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.use(express.json());
+
+// Middleware for parsing URL-encoded bodies (as sent by HTML forms)
+app.use(express.urlencoded({ extended: true }));
+
+// Optional: Add CORS middleware if your frontend is on a different port/domain
+const cors = require('cors');
+app.use(cors());
+
 // Serve static files from the "public" folder
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -139,6 +148,115 @@ app.get('/api/calories', async (req, res) => {
   } catch (err) {
     console.error('Error fetching deficits:', err);
     res.status(500).json({ error: 'Error fetching deficits' });
+  }
+});
+
+app.post('/api/nutrition', async (req, res) => {
+  try {
+    const { protein, carbs, fats, calories } = req.body;
+    
+    // Validate input
+    if (protein === undefined || carbs === undefined || fats === undefined || calories === undefined) {
+      return res.status(400).json({ error: 'Missing required nutrition data. Please provide protein, carbs, fats, and calories.' });
+    }
+    
+    // Format today's date in "YYYY / MM / DD" format to match your database
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayFormatted = `${year} / ${month} / ${day}`;
+    
+    // First, query the database to find today's entry
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Day',
+        title: {
+          equals: todayFormatted
+        }
+      }
+    });
+    
+    let pageId;
+    
+    if (response.results.length > 0) {
+      // Today's entry exists, get current values and update by adding new values
+      pageId = response.results[0].id;
+      const existingPage = response.results[0];
+      
+      // Get current values (defaulting to 0 if they don't exist)
+      const currentProtein = (existingPage.properties['Protein'] && existingPage.properties['Protein'].number) || 0;
+      const currentCarbs = (existingPage.properties['Carbs'] && existingPage.properties['Carbs'].number) || 0;
+      const currentFats = (existingPage.properties['Fats'] && existingPage.properties['Fats'].number) || 0;
+      const currentCalories = (existingPage.properties['Calories'] && existingPage.properties['Calories'].number) || 0;
+      
+      // Add new values to existing values
+      const newProtein = currentProtein + Number(protein);
+      const newCarbs = currentCarbs + Number(carbs);
+      const newFats = currentFats + Number(fats);
+      const newCalories = currentCalories + Number(calories);
+      
+      // Update with combined values
+      await notion.pages.update({
+        page_id: pageId,
+        properties: {
+          'Protein': { number: newProtein },
+          'Carbs': { number: newCarbs },
+          'Fats': { number: newFats },
+          'Calories': { number: newCalories }
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'Nutrition data added to today\'s totals',
+        date: todayFormatted,
+        newTotals: {
+          protein: newProtein,
+          carbs: newCarbs,
+          fats: newFats,
+          calories: newCalories
+        }
+      });
+    } else {
+      // Today's entry doesn't exist, create it
+      const newPage = await notion.pages.create({
+        parent: { database_id: databaseId },
+        properties: {
+          'Day': {
+            title: [
+              {
+                text: {
+                  content: todayFormatted
+                }
+              }
+            ]
+          },
+          'Protein': { number: Number(protein) },
+          'Carbs': { number: Number(carbs) },
+          'Fats': { number: Number(fats) },
+          'Calories': { number: Number(calories) },
+          // You may need to include other required properties for your database
+          // For example, if 'Week' is a required property, you'd need to determine the current week
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'New nutrition entry created for today',
+        date: todayFormatted,
+        newTotals: {
+          protein: Number(protein),
+          carbs: Number(carbs),
+          fats: Number(fats),
+          calories: Number(calories)
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error adding nutrition data:', err);
+    res.status(500).json({ error: 'Error adding nutrition data to Notion database' });
   }
 });
 

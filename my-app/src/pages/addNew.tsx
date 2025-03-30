@@ -284,56 +284,6 @@ const FoodList = ({ foodData, handleLogAmmount, modalToggle,setModalToggle }) =>
   };
   
 
-const Widget = ({ dailyDeficit, title, notionData}) => {
-
-    return(
-        <div className='w-[100%] border-2 border-gray-200  p-5 px-10 h-[60px] flex flex-row justify-between items-center rounded-t-lg '>
-            <h3 className='font-[600]'>Ammount</h3>
-            <h3 className='font-[800]'>|</h3>
-            <h3>Food</h3>
-            <h3>|</h3>
-            <h3>Calories</h3>
-            <h3>|</h3>
-            <h3>Protein</h3>
-            <h3>|</h3>
-            <h3>Fats</h3>
-            <h3>|</h3>
-            <h3>Carbs</h3>
-            <h3></h3>
-        </div>
-    )
-}
-
-const Widget_2 = ({ dailyDeficit, title, notionData}) => {
-
-  return(
-      <div className="flex justify-center opacity-100 w-full">        
-        <div className="md:w-1/2 m-5 min-w-[80%] w-full min-h-[500px]">
-          <div className="bg-gray-100 rounded-lg shadow-md p-6 border-2 border-gray-300 ">
-            <h2 className="text-[30px] font-[800] mb-4 p-0 opacity-100">{title}</h2>
-            <div className="chart-container mb-4 p-4 rounded-lg flex flex-col justify-center items-middle
-              bg-gradient-to-b from-gray-900 to-gray-100
-              shadow-xl
-              relative overflow-hidden
-              border border-gray-400 h-[80%] " >
-              {/* Glossy overlay effect */}
-              <div className="absolute inset-0 bg-gradient-to-b from-white to-transparent opacity-10 pointer-events-none"></div>
-              {/* Highlight effect at the top */}
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent to-transparent opacity-30"></div>
-              {/* Main content */}
-              <BasicPie chartData={notionData} />
-            </div>
-            <p className="text-center text-gray-700 font-semi opacity-50 text-[25px]">
-              Total: <span className="text-center text-gray-700 font-bold opacity-90 text-[25px]">{dailyDeficit}</span>
-            </p>
-          </div>
-        </div>
-      
-    </div>
-  )
-}
-
-
 import { LuMilk } from "react-icons/lu";
 import { GiTomato } from "react-icons/gi";
 import { TbAppleFilled } from "react-icons/tb";
