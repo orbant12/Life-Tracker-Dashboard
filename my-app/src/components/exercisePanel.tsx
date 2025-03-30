@@ -3,6 +3,7 @@ import { Activity, Heart, Dumbbell, Bike, FootprintsIcon, Trophy, ArrowRight, Za
 
 const ExercisePanel = () => {
   const [activeTab, setActiveTab] = useState('steps');
+  const [isLoading, setIsLoading] = useState(false); // New loading state
 
   const [formData, setFormData] = useState({
     steps: '',
@@ -62,7 +63,7 @@ const ExercisePanel = () => {
     if (!formData.steps) return;
     
     try {
-      setSubmitted(true);
+      setIsLoading(true); // Start loading
       const burn = await calculateCalorieBurn(activeTab,formData.steps,0)
       const response = await fetch("/api/steps", {
         method: 'POST',
@@ -77,6 +78,8 @@ const ExercisePanel = () => {
       
       const data = await response.json();
       console.log('Steps logged successfully:', data);
+      setSubmitted(true);
+      setIsLoading(false); // Stop loading
       
       // Reset form after timeout
       setTimeout(() => {
@@ -85,13 +88,14 @@ const ExercisePanel = () => {
       }, 3000);
     } catch (error) {
       console.error('Error logging steps:', error);
+      setIsLoading(false); // Stop loading on error
       setSubmitted(false);
     }
   };
   
   const logExercise = async () => {
     try {
-      setSubmitted(true);
+      setIsLoading(true); // Start loading
       
       let requestBody = {};
 
@@ -123,6 +127,7 @@ const ExercisePanel = () => {
       }
       else {
         // If required fields aren't filled, exit early
+        setIsLoading(false);
         setSubmitted(false);
         return;
       }
@@ -137,6 +142,8 @@ const ExercisePanel = () => {
       
       const data = await response.json();
       console.log('Exercise logged successfully:', data);
+      setSubmitted(true);
+      setIsLoading(false); // Stop loading on success
       
       // Reset form after timeout
       setTimeout(() => {
@@ -153,6 +160,7 @@ const ExercisePanel = () => {
       }, 3000);
     } catch (error) {
       console.error('Error logging exercise:', error);
+      setIsLoading(false); // Stop loading on error
       setSubmitted(false);
     }
   };
@@ -161,7 +169,7 @@ const ExercisePanel = () => {
     if (!formData.bikeMinutes || !formData.bikeDistance) return;
     
     try {
-      setSubmitted(true);
+      setIsLoading(true); // Start loading
       const burn = await calculateCalorieBurn(activeTab,formData.bikeMinutes,formData.bikeDistance)
       const response = await fetch("/api/bike", {
         method: 'POST',
@@ -177,6 +185,8 @@ const ExercisePanel = () => {
       
       const data = await response.json();
       console.log('Cycling data logged successfully:', data);
+      setSubmitted(true);
+      setIsLoading(false); // Stop loading on success
       
       // Reset form after timeout
       setTimeout(() => {
@@ -185,6 +195,7 @@ const ExercisePanel = () => {
       }, 3000);
     } catch (error) {
       console.error('Error logging cycling data:', error);
+      setIsLoading(false); // Stop loading on error
       setSubmitted(false);
     }
   };
@@ -193,8 +204,8 @@ const ExercisePanel = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Check if form is valid first
-    if (isCurrentTabEmpty()) return;
+    // Check if form is valid first and not already loading
+    if (isCurrentTabEmpty() || isLoading) return;
     
     // Call the appropriate logging function based on the active tab
     switch (activeTab) {
@@ -248,6 +259,7 @@ const ExercisePanel = () => {
                 onChange={handleInputChange}
                 placeholder="Enter steps"
                 className="w-full p-4 text-2xl font-bold text-center text-blue-600 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
                 steps
@@ -273,6 +285,7 @@ const ExercisePanel = () => {
                 onChange={handleInputChange}
                 placeholder="Enter duration"
                 className="w-full p-4 text-2xl font-bold text-center text-green-600 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring focus:ring-green-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
                 minutes
@@ -287,6 +300,7 @@ const ExercisePanel = () => {
                 onChange={handleInputChange}
                 placeholder="Enter Distance"
                 className="w-full p-4 text-2xl font-bold text-center text-green-600 border-2 border-gray-300 rounded-lg focus:border-green-500 focus:ring focus:ring-green-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
                 km
@@ -306,6 +320,7 @@ const ExercisePanel = () => {
                 onChange={handleInputChange}
                 placeholder="Enter VO2 Max"
                 className="w-full p-4 text-2xl font-bold text-center text-purple-600 border-2 border-gray-300 rounded-lg focus:border-purple-500 focus:ring focus:ring-purple-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
                 ml/kg/min
@@ -330,6 +345,7 @@ const ExercisePanel = () => {
                 onChange={handleInputChange}
                 placeholder="Enter duration"
                 className="w-full p-4 text-2xl font-bold text-center text-red-600 border-2 border-gray-300 rounded-lg focus:border-red-500 focus:ring focus:ring-red-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
                 minutes
@@ -341,12 +357,12 @@ const ExercisePanel = () => {
         {workoutTypes.map((type) => (
           <div
             key={type.id}
-            onClick={() => setSelectedType(type.id)}
+            onClick={!isLoading ? () => setSelectedType(type.id) : undefined}
             className={`p-4 rounded-lg border-2 transition-all ${
               selectedType === type.id
                 ? 'border-red-500 bg-red-50 text-red-700 font-bold shadow-md'
                 : 'border-gray-200 hover:border-red-300 text-gray-700'
-            }`}
+            } ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
           >
             {type.label}
           </div>
@@ -366,6 +382,7 @@ const ExercisePanel = () => {
                 onChange={handleInputChange}
                 placeholder="Enter duration"
                 className="w-full p-4 text-2xl font-bold text-center text-amber-600 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:ring focus:ring-amber-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
                 minutes
@@ -380,6 +397,7 @@ const ExercisePanel = () => {
                 onChange={handleInputChange}
                 placeholder="Enter distance"
                 className="w-full p-4 text-2xl font-bold text-center text-amber-600 border-2 border-gray-300 rounded-lg focus:border-amber-500 focus:ring focus:ring-amber-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 font-medium">
                 km
@@ -432,12 +450,12 @@ const ExercisePanel = () => {
             {exerciseTabs.map((tab) => (
               <div
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={!isLoading ? () => setActiveTab(tab.id) : undefined}
                 className={`flex items-center space-x-2 px-4 py-3 rounded-lg transition-all ${
                   activeTab === tab.id
                     ? `bg-white border-2 border-${tab.id === 'steps' ? 'blue' : tab.id === 'zone2' ? 'green' : tab.id === 'vo2max' ? 'purple' : tab.id === 'gym' ? 'red' : 'amber'}-400 shadow-md`
                     : 'bg-white/80 border border-gray-200'
-                }`}
+                } ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
               >
                 <tab.icon size={18} className={tab.color} />
                 <span className={`font-medium ${activeTab === tab.id ? tab.color : 'text-gray-600'}`}>
@@ -453,12 +471,12 @@ const ExercisePanel = () => {
           {renderTabContent()}
           
           <div className="mt-6 flex justify-between items-center">
-          <div
-            onClick={handleSubmit}
-            className={`flex w-full items-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
-                isCurrentTabEmpty()
-                ? 'bg-gray-300 cursor-not-allowed'
-                : activeTab === 'steps' 
+            <div
+              onClick={handleSubmit}
+              className={`flex w-full items-center justify-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
+                isCurrentTabEmpty() || isLoading
+                  ? 'bg-gray-300 cursor-not-allowed'
+                  : activeTab === 'steps' 
                     ? 'bg-blue-600 hover:opacity-90'
                     : activeTab === 'zone2' 
                     ? 'bg-green-600 hover:opacity-90'
@@ -467,10 +485,22 @@ const ExercisePanel = () => {
                     : activeTab === 'gym' 
                     ? 'bg-red-600 hover:opacity-90'
                     : 'bg-amber-600 hover:opacity-90'
-            }`}
+              }`}
             >
-            <span>Save Activity</span>
-            <ArrowRight size={16} />
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <span>Save Activity</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
             </div>
           </div>
         </form>

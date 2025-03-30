@@ -15,11 +15,6 @@ const LogNew = () => {
   
     const [viewOption, setViewOption] = useState<ViewOption>('food');
    
-  
-
-
-
-
 return (
 // make it to be on the top of the page
     <div className="flex flex-col mx-auto px-0 py-4 rounded shadow-lg bg-gray-100 px-12 h-[100%] mt-[-30px] ">
@@ -332,6 +327,7 @@ import SleepPanel from '../components/sleepPanel';
 const WeightPanel = () => {
   const [weight, setWeight] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // New state for loading
   const [isPoop, setIsPoop] = useState(false)
   const [isBloated, setIsBloated] = useState(false)
   const [isWatery, setIsWatery] = useState(false)
@@ -346,9 +342,9 @@ const WeightPanel = () => {
   
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (weight !== null) {
-      setSubmitted(true);
-
+    if (weight !== null && weight !== '') {
+      setIsLoading(true); // Start loading
+      
       fetch('/api/weight', {
         method: 'POST',
         headers: {
@@ -357,7 +353,7 @@ const WeightPanel = () => {
         body: JSON.stringify({
           weight: parseFloat(weight),
           bloated: isBloated,
-          poop:isPoop,
+          poop: isPoop,
           watery: isWatery,
           isBadSleep: isBadSleep
         }),
@@ -365,15 +361,17 @@ const WeightPanel = () => {
       .then(response => response.json())
       .then(data => {
         console.log('Weight saved successfully:', data);
+        setSubmitted(true);
+        setIsLoading(false); // Stop loading on success
       })
       .catch(error => {
         console.error('Error saving weight:', error);
+        setIsLoading(false); // Stop loading on error
       })
       .finally(() => {
         setTimeout(() => {
           setSubmitted(false);
           setWeight('');
-          
         }, 3000);
       });
     }
@@ -452,18 +450,30 @@ const WeightPanel = () => {
           </div>
           
           <div className="mt-6 flex justify-between items-center">
-            
-            <div
-              className={`flex w-[100%] items-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
-                weight === ''
+            <button
+              type="submit"
+              disabled={weight === '' || isLoading}
+              className={`flex w-full items-center justify-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white transition-all ${
+                weight === '' || isLoading
                   ? 'bg-gray-300 cursor-not-allowed'
                   : 'bg-indigo-600 hover:bg-indigo-700'
               }`}
-              onClick={handleSubmit}
             >
-              <span className='text-center' >Log Weight</span>
-              <ArrowRight size={16} />
-            </div>
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <span>Log Weight</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
+            </button>
           </div>
         </form>
         
@@ -504,7 +514,6 @@ const WeightPanel = () => {
     </div>
   );
 };
-
 
 
 

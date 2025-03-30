@@ -475,6 +475,14 @@ app.post('/api/foods', async (req, res) => {
       const currentFats = (existingPage.properties['Fats'] && existingPage.properties['Fats'].number) || 0;
       const currentCalories = (existingPage.properties['Calories'] && existingPage.properties['Calories'].number) || 0;
       
+      // Get current deficit value
+      const currentDeficit = (existingPage.properties['Deficit'] && 
+                             existingPage.properties['Deficit'].number !== null) ? 
+                             existingPage.properties['Deficit'].number : 1800;
+      
+      // Calculate new deficit by subtracting food calories
+      const newDeficit = currentDeficit - Number(calories);
+      
       // Get existing food relations
       let existingFoods = [];
       if (existingPage.properties['Foods'] && existingPage.properties['Foods'].relation) {
@@ -491,7 +499,35 @@ app.post('/api/foods', async (req, res) => {
           'Carbs': { number: currentCarbs + Number(carbs) },
           'Fats': { number: currentFats + Number(fats) },
           'Calories': { number: currentCalories + Number(calories) },
+          'Deficit': { number: newDeficit },
           'Foods': { relation: existingFoods }
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: 'Food added successfully',
+        food: {
+          id: newFood.id,
+          name,
+          protein: Number(protein),
+          carbs: Number(carbs),
+          fats: Number(fats),
+          calories: Number(calories),
+          servingSize: servingSize || 'standard',
+          servingUnit: servingUnit || 'serving',
+          date: todayFormatted
+        },
+        nutritionTotals: {
+          protein: currentProtein + Number(protein),
+          carbs: currentCarbs + Number(carbs),
+          fats: currentFats + Number(fats),
+          calories: currentCalories + Number(calories)
+        },
+        deficit: {
+          previous: currentDeficit,
+          new: newDeficit,
+          change: -Number(calories)
         }
       });
     } else {
@@ -503,13 +539,17 @@ app.post('/api/foods', async (req, res) => {
         'Week': { multi_select: [{ name: weekRange }] }
       } : { 'Week': { multi_select: [] } };
       
+      // Start with default deficit (1800) and subtract food calories
+      const initialDeficit = 1800;
+      const newDeficit = initialDeficit - Number(calories);
+      
       await notion.pages.create({
         parent: { database_id: databaseId },
         properties: {
           'Day': {
             title: [{ text: { content: todayFormatted } }]
           },
-          'Deficit': { number: 1800 - Number(calories)},
+          'Deficit': { number: newDeficit },
           'Protein': { number: Number(protein) },
           'Carbs': { number: Number(carbs) },
           'Fats': { number: Number(fats) },
@@ -520,23 +560,34 @@ app.post('/api/foods', async (req, res) => {
           ...weekProperty
         }
       });
+      
+      res.json({
+        success: true,
+        message: 'New entry created with food data for today',
+        food: {
+          id: newFood.id,
+          name,
+          protein: Number(protein),
+          carbs: Number(carbs),
+          fats: Number(fats),
+          calories: Number(calories),
+          servingSize: servingSize || 'standard',
+          servingUnit: servingUnit || 'serving',
+          date: todayFormatted
+        },
+        nutritionTotals: {
+          protein: Number(protein),
+          carbs: Number(carbs),
+          fats: Number(fats),
+          calories: Number(calories)
+        },
+        deficit: {
+          previous: initialDeficit,
+          new: newDeficit,
+          change: -Number(calories)
+        }
+      });
     }
-    
-    res.json({
-      success: true,
-      message: 'Food added successfully',
-      food: {
-        id: newFood.id,
-        name,
-        protein: Number(protein),
-        carbs: Number(carbs),
-        fats: Number(fats),
-        calories: Number(calories),
-        servingSize: servingSize || 'standard',
-        servingUnit: servingUnit || 'serving',
-        date: todayFormatted
-      }
-    });
   } catch (err) {
     console.error('Error adding food:', err);
     res.status(500).json({ error: 'Error adding food to log: ' + err.message });

@@ -3,6 +3,7 @@ import { Moon, Clock, BedDouble, Coffee, Zap, ArrowRight, AlertTriangle, Smile }
 
 const SleepPanel = () => {
   const [activeTab, setActiveTab] = useState('duration');
+  const [isLoading, setIsLoading] = useState(false); // New loading state
   const [formData, setFormData] = useState({
     sleepHours: '',
     sleepQuality: '',
@@ -23,9 +24,9 @@ const SleepPanel = () => {
   
   const handleSubmit = () => {
     // Check if required fields are filled based on active tab
-    if (isCurrentTabEmpty()) return;
+    if (isCurrentTabEmpty() || isLoading) return;
     
-    setSubmitted(true);
+    setIsLoading(true); // Start loading
     
     // Prepare request body based on active tab
     let requestBody = {
@@ -61,11 +62,12 @@ const SleepPanel = () => {
     .then(response => response.json())
     .then(data => {
       console.log('Sleep data saved successfully:', data);
-      // Optionally add logic to handle successful response
+      setSubmitted(true);
+      setIsLoading(false); // Stop loading on success
     })
     .catch(error => {
       console.error('Error saving sleep data:', error);
-      // Optionally add error handling logic
+      setIsLoading(false); // Stop loading on error
     })
     .finally(() => {
       // Reset form after timeout regardless of success/failure
@@ -112,12 +114,12 @@ const SleepPanel = () => {
                 {sleepQualityOptions.map((option) => (
                   <div
                     key={option.id}
-                    onClick={() => setFormData(prev => ({ ...prev, sleepQuality: option.id }))}
-                    className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                    onClick={!isLoading ? () => setFormData(prev => ({ ...prev, sleepQuality: option.id })) : undefined}
+                    className={`p-4 rounded-lg border-2 transition-all ${
                       formData.sleepQuality === option.id
                         ? `${option.color} font-bold shadow-md`
                         : 'border-gray-200 hover:border-indigo-300 text-gray-700'
-                    }`}
+                    } ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
                   >
                     {option.label}
                   </div>
@@ -140,6 +142,7 @@ const SleepPanel = () => {
                 value={formData.bedTime}
                 onChange={handleInputChange}
                 className="w-full p-4 text-2xl font-bold text-center text-teal-600 border-2 border-gray-300 rounded-lg focus:border-teal-500 focus:ring focus:ring-teal-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
             </div>
             
@@ -153,6 +156,7 @@ const SleepPanel = () => {
                 value={formData.wakeTime}
                 onChange={handleInputChange}
                 className="w-full p-4 text-2xl font-bold text-center text-teal-600 border-2 border-gray-300 rounded-lg focus:border-teal-500 focus:ring focus:ring-teal-200 focus:ring-opacity-50"
+                disabled={isLoading}
               />
             </div>
             
@@ -191,10 +195,10 @@ const SleepPanel = () => {
   };
   
   // Helper functions
-  const calculateSleepWindow = (bedTime:any, wakeTime:any) => {
+  const calculateSleepWindow = (bedTime, wakeTime) => {
     try {
-      const bedDate:any = new Date(`2000-01-01T${bedTime}`);
-      let wakeDate:any = new Date(`2000-01-01T${wakeTime}`);
+      const bedDate = new Date(`2000-01-01T${bedTime}`);
+      let wakeDate = new Date(`2000-01-01T${wakeTime}`);
       
       // Adjust if wake time is on the next day
       if (wakeDate < bedDate) {
@@ -239,12 +243,12 @@ const SleepPanel = () => {
             {sleepTabs.map((tab) => (
               <div
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center space-x-2 px-4 py-3 rounded-lg transition-all cursor-pointer ${
+                onClick={!isLoading ? () => setActiveTab(tab.id) : undefined}
+                className={`flex items-center space-x-2 px-4 py-3 rounded-lg transition-all ${
                   activeTab === tab.id
                     ? 'bg-white border-2 border-gray-200 shadow-md'
                     : 'bg-white/80 border border-gray-200'
-                }`}
+                } ${isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'}`}
               >
                 <tab.icon size={18} className={tab.color} />
                 <span className={`font-medium ${activeTab === tab.id ? tab.color : 'text-gray-600'}`}>
@@ -256,27 +260,39 @@ const SleepPanel = () => {
         </div>
         
         {/* Content Area */}
-        <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-md mb-6">
+        <div className="bg-white p-6 rounded-xl shadow-md mb-6">
           {renderTabContent()}
           
           <div className="mt-6 flex justify-between items-center">
             <div
-              onClick={() => handleSubmit()}
-              className={`flex w-full items-center justify-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white cursor-pointer ${
-                isCurrentTabEmpty()
+              onClick={isCurrentTabEmpty() || isLoading ? null : handleSubmit}
+              className={`flex w-full items-center justify-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
+                isCurrentTabEmpty() || isLoading
                   ? 'bg-gray-300 cursor-not-allowed'
                   : activeTab === 'duration' 
-                    ? 'bg-indigo-600 hover:opacity-90'
+                    ? 'bg-indigo-600 hover:opacity-90 cursor-pointer'
                     : activeTab === 'timing' 
-                    ? 'bg-teal-600 hover:opacity-90'
-                    : 'bg-purple-600 hover:opacity-90'
+                    ? 'bg-teal-600 hover:opacity-90 cursor-pointer'
+                    : 'bg-purple-600 hover:opacity-90 cursor-pointer'
               }`}
             >
-              <span>Log Sleep</span>
-              <ArrowRight size={16} />
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <span>Log Sleep</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
             </div>
           </div>
-        </form>
+        </div>
         
         {/* Confirmation Message */}
         {submitted && (

@@ -32,6 +32,7 @@ export default function BasicModal({foodData, handleLogAmmount}) {
   const [addedProtein, setAddedProtein] = React.useState(0)
   const [addedCarbs, setAddedCarbs] = React.useState(0)
   const [isPiece, setIsPiece] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(false); // New loading state
 
   const handleOpen = (item) => {
     setOpen(true)
@@ -45,31 +46,40 @@ export default function BasicModal({foodData, handleLogAmmount}) {
   const handleClose = () => setOpen(false);
 
   const handleAddNew = async () => {
+    setIsLoading(true); // Start loading state
+    
+    try {
+      const serving = isPiece ? "piece" : "g"
 
-    const serving = isPiece ? "piece" : "g"
-
-    const response = await fetch('/api/foods', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: nameTitle,
-          calories: addedCal,
-          protein: addedProtein,
-          carbs: addedCarbs,
-          fats: addedFats,
-          servingSize: amount,
-          servingUnit: serving
-        }),
-      });
+      const response = await fetch('/api/foods', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: nameTitle,
+            calories: addedCal,
+            protein: addedProtein,
+            carbs: addedCarbs,
+            fats: addedFats,
+            servingSize: amount,
+            servingUnit: serving
+          }),
+        });
 
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to save nutrition data');
       }
-
-      handleClose()
+      
+      // Success - close modal
+      handleClose();
+    } catch (error) {
+      console.error('Error saving food:', error);
+      // You could add error handling UI here
+    } finally {
+      setIsLoading(false); // End loading regardless of outcome
+    }
   }
 
   const [currBox, setCurrBox] = React.useState([{title:"2 Eggs",multiplier:2},{title:"3 Eggs",multiplier:3},{title:"4 Eggs",multiplier:4}])
@@ -172,7 +182,7 @@ export default function BasicModal({foodData, handleLogAmmount}) {
                         setAddedProtein(Math.round(n * (protein / 100)));
                     }
                 }}
-                
+                isLoading={isLoading}
             />
           </Typography>
         </Box>
@@ -185,6 +195,7 @@ export const InputCalories = ({
     title,
     setValue,
     handleAdd,
+    isLoading
 }) => {
 
     const [val, setVal] = React.useState(0)
@@ -215,19 +226,32 @@ export const InputCalories = ({
                         onChange={handleChange}
                         className="w-full p-2 pr-12 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
                         aria-label="Enter number of eggs"
+                        disabled={isLoading}
                     />
                 </div>
             </div>
   
         </div>
-        <div onClick={() => handleAdd()}
-                className=" flex flex-col justify-center mr-10 w-[150px] h-[50px] text-center align-center bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-lg 
-                            shadow-inset hover:from-blue-600 hover:to-purple-600 hover:opacity-100 opacity-70 hover:shadow-lg hover:-translate-y-1
-                            cursor-pointer transition-all duration-200 ease-in-out"
-                >
-                   + Done
-                </div>
-          </div>
+        <div 
+          onClick={!isLoading ? handleAdd : undefined}
+          className={`flex flex-col justify-center mr-10 w-[150px] h-[50px] text-center align-center 
+                    bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-lg 
+                    shadow-inset ${!isLoading ? 'hover:from-blue-600 hover:to-purple-600 hover:opacity-100 hover:shadow-lg hover:-translate-y-1 cursor-pointer' : 'opacity-70 cursor-not-allowed'}
+                    transition-all duration-200 ease-in-out`}
+        >
+          {isLoading ? (
+            <div className="flex items-center justify-center">
+              <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <span>Adding...</span>
+            </div>
+          ) : (
+            "+ Done"
+          )}
+        </div>
+      </div>
     );
 };
 
