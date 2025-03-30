@@ -3,6 +3,7 @@ import { Activity, Heart, Dumbbell, Bike, FootprintsIcon, Trophy, ArrowRight, Za
 
 const ExercisePanel = () => {
   const [activeTab, setActiveTab] = useState('steps');
+
   const [formData, setFormData] = useState({
     steps: '',
     zone2Minutes: '',
@@ -14,6 +15,40 @@ const ExercisePanel = () => {
     bikeDistance: '',
   });
   const [submitted, setSubmitted] = useState(false);
+  const [selectedType, setSelectedType] = useState('');
+
+  const calculateCalorieBurn = (type,duration,distance) => {
+    if(type == "zone2"){
+      const caloriesPerMin = 11
+      const kmPerBurn = 75
+      const total_1 = caloriesPerMin * duration;
+      const total_2 = kmPerBurn * distance
+      if(total_1 >= total_2){
+        return total_1
+      } else {
+        return total_2
+      }
+    } else if (type == "gym") {
+      const caloriesPerMin = selectedType == 'fullbody' ? 9 : 7
+      const total = caloriesPerMin * duration;
+      return total
+    } else if (type == "steps"){
+      const perStep = 0.04
+      const total = perStep * duration
+      return total
+    } else if (type == "bike"){
+      const caloriesPerMin = 8
+      const kmPerBurn = 28
+      const total_2 = caloriesPerMin * duration
+      const total_1 = kmPerBurn * distance
+      if(total_1 >= total_2){
+        return total_1
+      } else {
+        return total_2
+      }
+      
+    }
+  }
   
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -22,27 +57,162 @@ const ExercisePanel = () => {
       [name]: value
     }));
   };
+
+  const logSteps = async () => {
+    if (!formData.steps) return;
+    
+    try {
+      setSubmitted(true);
+      const burn = await calculateCalorieBurn(activeTab,formData.steps,0)
+      const response = await fetch("/api/steps", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          steps: parseInt(formData.steps),
+          burn:burn
+        }),
+      });
+      
+      const data = await response.json();
+      console.log('Steps logged successfully:', data);
+      
+      // Reset form after timeout
+      setTimeout(() => {
+        setSubmitted(false);
+        setFormData(prev => ({ ...prev, steps: '' }));
+      }, 3000);
+    } catch (error) {
+      console.error('Error logging steps:', error);
+      setSubmitted(false);
+    }
+  };
+  
+  const logExercise = async () => {
+    try {
+      setSubmitted(true);
+      
+      let requestBody = {};
+
+      // Create request body based on active tab
+      if (activeTab === 'zone2' && formData.zone2Minutes && formData.zone2HeartRate) {
+        const burn = await calculateCalorieBurn(activeTab,formData.zone2Minutes,formData.zone2HeartRate)
+        requestBody = {
+          exerciseType: 'zone2',
+          duration: parseInt(formData.zone2Minutes),
+          distance: parseFloat(formData.zone2HeartRate),
+          burn: burn,
+        };
+      } 
+      else if (activeTab === 'vo2max' && formData.vo2MaxScore) {
+        requestBody = {
+          exerciseType: 'vo2max',
+          duration: 0, // You might want to add a duration field to your VO2Max form
+          vo2max: parseFloat(formData.vo2MaxScore)
+        };
+      }
+      else if (activeTab === 'gym' && formData.gymMinutes && selectedType) {
+        const burn = await calculateCalorieBurn(activeTab,formData.gymMinutes,0)
+        requestBody = {
+          exerciseType: 'gym',
+          duration: parseInt(formData.gymMinutes),
+          workoutType: selectedType,
+          burn:burn,
+        };
+      }
+      else {
+        // If required fields aren't filled, exit early
+        setSubmitted(false);
+        return;
+      }
+      
+      const response = await fetch("/api/exercise", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      });
+      
+      const data = await response.json();
+      console.log('Exercise logged successfully:', data);
+      
+      // Reset form after timeout
+      setTimeout(() => {
+        setSubmitted(false);
+        
+        if (activeTab === 'zone2') {
+          setFormData(prev => ({ ...prev, zone2Minutes: '', zone2HeartRate: '' }));
+        } else if (activeTab === 'vo2max') {
+          setFormData(prev => ({ ...prev, vo2MaxScore: '' }));
+        } else if (activeTab === 'gym') {
+          setFormData(prev => ({ ...prev, gymMinutes: '' }));
+          setSelectedType('');
+        }
+      }, 3000);
+    } catch (error) {
+      console.error('Error logging exercise:', error);
+      setSubmitted(false);
+    }
+  };
+  
+  const logBike = async () => {
+    if (!formData.bikeMinutes || !formData.bikeDistance) return;
+    
+    try {
+      setSubmitted(true);
+      const burn = await calculateCalorieBurn(activeTab,formData.bikeMinutes,formData.bikeDistance)
+      const response = await fetch("/api/bike", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          duration: parseInt(formData.bikeMinutes),
+          distance: parseFloat(formData.bikeDistance),
+          burn: burn
+        }),
+      });
+      
+      const data = await response.json();
+      console.log('Cycling data logged successfully:', data);
+      
+      // Reset form after timeout
+      setTimeout(() => {
+        setSubmitted(false);
+        setFormData(prev => ({ ...prev, bikeMinutes: '', bikeDistance: '' }));
+      }, 3000);
+    } catch (error) {
+      console.error('Error logging cycling data:', error);
+      setSubmitted(false);
+    }
+  };
+  
   
   const handleSubmit = (e) => {
     e.preventDefault();
-    setSubmitted(true);
-    // Here you would typically save to a database
-    setTimeout(() => {
-      setSubmitted(false);
-      // Reset only the active tab fields to preserve other data
-      if (activeTab === 'steps') {
-        setFormData(prev => ({ ...prev, steps: '' }));
-      } else if (activeTab === 'zone2') {
-        setFormData(prev => ({ ...prev, zone2Minutes: '', zone2HeartRate: '' }));
-      } else if (activeTab === 'vo2max') {
-        setFormData(prev => ({ ...prev, vo2MaxScore: '' }));
-      } else if (activeTab === 'gym') {
-        setFormData(prev => ({ ...prev, gymMinutes: '', gymCalories: '' }));
-      } else if (activeTab === 'bike') {
-        setFormData(prev => ({ ...prev, bikeMinutes: '', bikeDistance: '' }));
-      }
-    }, 3000);
-  };
+    
+    // Check if form is valid first
+    if (isCurrentTabEmpty()) return;
+    
+    // Call the appropriate logging function based on the active tab
+    switch (activeTab) {
+      case 'steps':
+        logSteps();
+        break;
+      case 'zone2':
+      case 'vo2max':
+      case 'gym':
+        logExercise();
+        break;
+      case 'bike':
+        logBike();
+        break;
+      default:
+        break;
+    }
+  }
   
   const today = new Date().toLocaleDateString('en-US', { 
     weekday: 'long', 
@@ -57,8 +227,6 @@ const ExercisePanel = () => {
     { id: 'gym', icon: Dumbbell, label: 'Gym', color: 'text-red-500' },
     { id: 'bike', icon: Bike, label: 'Bike', color: 'text-amber-500' }
   ];
-
-  const [selectedType, setSelectedType] = useState('');
   
   const workoutTypes = [
     { id: 'pull', label: 'Pull' },
@@ -286,6 +454,7 @@ const ExercisePanel = () => {
           
           <div className="mt-6 flex justify-between items-center">
           <div
+            onClick={handleSubmit}
             className={`flex w-full items-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
                 isCurrentTabEmpty()
                 ? 'bg-gray-300 cursor-not-allowed'

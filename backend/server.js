@@ -309,6 +309,7 @@ app.post('/api/nutrition', async (req, res) => {
               }
             ]
           },
+          'Deficit': { number: 1800 - calories},
           'Protein': { number: Number(protein) },
           'Carbs': { number: Number(carbs) },
           'Fats': { number: Number(fats) },
@@ -508,6 +509,7 @@ app.post('/api/foods', async (req, res) => {
           'Day': {
             title: [{ text: { content: todayFormatted } }]
           },
+          'Deficit': { number: 1800 - Number(calories)},
           'Protein': { number: Number(protein) },
           'Carbs': { number: Number(carbs) },
           'Fats': { number: Number(fats) },
@@ -753,6 +755,959 @@ app.get('/api/summary', async (req, res) => {
   } catch (err) {
     console.error('Error fetching summary:', err);
     res.status(500).json({ error: 'Error fetching nutrition summary' });
+  }
+});
+
+/*[ Weigth ]*/
+
+app.post('/api/weight', async (req, res) => {
+  try {
+    const { weight, bloated, poop, watery, isBadSleep } = req.body;
+    
+    // Validate input
+    if (weight === undefined) {
+      return res.status(400).json({ error: 'Missing required weight data. Please provide weight.' });
+    }
+
+    // Format today's date in "YYYY / MM / DD" format to match your database
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const todayFormatted = `${year} / ${month} / ${day}`;
+    
+    // Check if today's entry already exists
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Day',
+        title: {
+          equals: todayFormatted
+        }
+      }
+    });
+    
+    // Prepare the health condition properties
+    const healthConditions = {
+      'Weight': { number: Number(weight) }
+    };
+    
+    // Add toggle properties if they exist in your database
+    if (bloated !== undefined) {
+      healthConditions['Bloated'] = { checkbox: bloated };
+    }
+    
+    if (poop !== undefined) {
+      healthConditions['Poop'] = { checkbox: poop };
+    }
+    
+    if (watery !== undefined) {
+      healthConditions['Watery'] = { checkbox: watery };
+    }
+    
+    if (isBadSleep !== undefined) {
+      healthConditions['Bad Sleep'] = { checkbox: isBadSleep };
+    }
+    
+    if (response.results.length > 0) {
+      // Today's entry exists, update the weight and health conditions
+      const pageId = response.results[0].id;
+      
+      await notion.pages.update({
+        page_id: pageId,
+        properties: healthConditions
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'Weight and health conditions updated for today',
+        date: todayFormatted,
+        weight: Number(weight),
+        conditions: {
+          bloated: bloated || false,
+          poop: poop || false,
+          watery: watery || false,
+          isBadSleep: isBadSleep || false
+        }
+      });
+    } else {
+      // Today's entry doesn't exist, create it
+      // Get available weeks for proper categorization
+      const availableWeeks = await getAllWeeks();
+      const weekRange = getWeekRangeForDate(today, availableWeeks);
+      
+      // Prepare week multi-select property
+      const weekProperty = weekRange ? {
+        'Week': {
+          multi_select: [
+            {
+              name: weekRange
+            }
+          ]
+        }
+      } : { 'Week': { multi_select: [] } };
+      
+      // Create new entry with weight and health conditions
+      const newPage = await notion.pages.create({
+        parent: { database_id: databaseId },
+        properties: {
+          'Day': {
+            title: [
+              {
+                text: {
+                  content: todayFormatted
+                }
+              }
+            ]
+          },
+          ...healthConditions,
+          ...weekProperty,
+          // Initialize other required fields with default values
+          'Protein': { number: 0 },
+          'Carbs': { number: 0 },
+          'Fats': { number: 0 },
+          'Calories': { number: 0 },
+          'Deficit': { number: 1800},
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'New entry created with weight and health conditions for today',
+        date: todayFormatted,
+        week: weekRange || 'No matching week found',
+        weight: Number(weight),
+        conditions: {
+          bloated: bloated || false,
+          poop: poop || false,
+          watery: watery || false,
+          isBadSleep: isBadSleep || false
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error adding weight data:', err);
+    res.status(500).json({ error: 'Error adding weight data to Notion database: ' + err.message });
+  }
+});
+
+/**
+ * GET /api/weight
+ * Gets today's weight if it exists
+ */
+app.get('/api/weight', async (req, res) => {
+  try {
+    // Format today's date in "YYYY / MM / DD" format
+    const todayFormatted = getTodayFormatted();
+    
+    // Query to find today's entry
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Day',
+        title: {
+          equals: todayFormatted
+        }
+      }
+    });
+    
+    if (response.results.length > 0) {
+      const page = response.results[0];
+      const weight = (page.properties['Weight'] && page.properties['Weight'].number) || null;
+      
+      res.json({
+        success: true,
+        date: todayFormatted,
+        weight: weight
+      });
+    } else {
+      // No entry for today
+      res.json({
+        success: true,
+        date: todayFormatted,
+        weight: null,
+        message: 'No weight logged for today'
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching weight:', err);
+    res.status(500).json({ error: 'Error fetching weight data' });
+  }
+});
+
+/*[Movements]*/
+
+app.post('/api/steps', async (req, res) => {
+  try {
+    const { steps, burn } = req.body;
+    
+    // Validate input
+    if (steps === undefined) {
+      return res.status(400).json({ error: 'Missing steps data. Please provide steps count.' });
+    }
+
+    // Burn is optional but if provided, should be a number
+    const burnValue = burn !== undefined ? Number(burn) : 0;
+
+    // Format today's date in "YYYY / MM / DD" format to match your database
+    const todayFormatted = getTodayFormatted();
+    
+    // Check if today's entry already exists
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Day',
+        title: {
+          equals: todayFormatted
+        }
+      }
+    });
+    
+    if (response.results.length > 0) {
+      // Today's entry exists, update the steps and Kcal From Movement
+      const pageId = response.results[0].id;
+      const existingPage = response.results[0];
+      
+      // Get current values (if they exist)
+      const currentSteps = existingPage.properties['Steps'] && 
+                           existingPage.properties['Steps'].number !== null ? 
+                           existingPage.properties['Steps'].number : 0;
+      
+      const currentKcal = existingPage.properties['Kcal From Movement'] && 
+                          existingPage.properties['Kcal From Movement'].number !== null ? 
+                          existingPage.properties['Kcal From Movement'].number : 0;
+      
+      // Get current deficit value
+      const currentDeficit = existingPage.properties['Deficit'] && 
+                             existingPage.properties['Deficit'].number !== null ? 
+                             existingPage.properties['Deficit'].number : 1800;
+      
+      // Add new values to existing values
+      const updatedSteps = currentSteps + Number(steps);
+      const updatedKcal = currentKcal + burnValue;
+      const updatedDeficit = currentDeficit + burnValue;
+      
+      // Prepare properties to update
+      const updatedProperties = {
+        'Steps': { number: updatedSteps }
+      };
+      
+      // Only include Kcal From Movement and Deficit if burn was provided
+      if (burn !== undefined) {
+        updatedProperties['Kcal From Movement'] = { number: updatedKcal };
+        updatedProperties['Deficit'] = { number: updatedDeficit };
+      }
+      
+      await notion.pages.update({
+        page_id: pageId,
+        properties: updatedProperties
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'Steps updated for today',
+        date: todayFormatted,
+        previousValues: {
+          steps: currentSteps,
+          kcal: currentKcal,
+          deficit: currentDeficit
+        },
+        addedValues: {
+          steps: Number(steps),
+          burn: burnValue
+        },
+        newTotals: {
+          steps: updatedSteps,
+          kcal: updatedKcal,
+          deficit: updatedDeficit
+        }
+      });
+    } else {
+      // Today's entry doesn't exist, create it
+      const availableWeeks = await getAllWeeks();
+      const today = new Date();
+      const weekRange = getWeekRangeForDate(today, availableWeeks);
+      
+      // Prepare week multi-select property
+      const weekProperty = weekRange ? {
+        'Week': {
+          multi_select: [
+            {
+              name: weekRange
+            }
+          ]
+        }
+      } : { 'Week': { multi_select: [] } };
+      
+      // Calculate initial deficit including burn
+      const initialDeficit = 1800;
+      const deficitValue = burn !== undefined ? initialDeficit + burnValue : initialDeficit;
+      
+      // Prepare properties for new entry
+      const newProperties = {
+        'Day': {
+          title: [
+            {
+              text: {
+                content: todayFormatted
+              }
+            }
+          ]
+        },
+        'Steps': { number: Number(steps) },
+        'Deficit': { number: deficitValue },
+        ...weekProperty,
+        // Initialize other required fields with default values
+        'Protein': { number: 0 },
+        'Carbs': { number: 0 },
+        'Fats': { number: 0 },
+        'Calories': { number: 0 }
+      };
+      
+      // Add Kcal From Movement if burn was provided
+      if (burn !== undefined) {
+        newProperties['Kcal From Movement'] = { number: burnValue };
+      }
+      
+      // Create new entry
+      const newPage = await notion.pages.create({
+        parent: { database_id: databaseId },
+        properties: newProperties
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'New entry created with steps for today',
+        date: todayFormatted,
+        week: weekRange || 'No matching week found',
+        values: {
+          steps: Number(steps),
+          burn: burnValue,
+          deficit: deficitValue
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error logging steps:', err);
+    res.status(500).json({ error: 'Error logging steps to Notion database: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/exercise
+ * Logs exercise data (Zone 2, VO2 Max or Gym workouts) to Notion database
+ */
+app.post('/api/exercise', async (req, res) => {
+  try {
+    const { 
+      exerciseType, // 'zone2', 'vo2max', or 'gym'
+      duration,     // minutes for all types
+      distance,     // for zone2 (km)
+      vo2max,       // for vo2max (ml/kg/min)
+      workoutType,  // for gym ('pull', 'push', 'fullbody')
+      burn          // calories burned (optional)
+    } = req.body;
+    
+    // Validate input
+    if (!exerciseType || duration === undefined) {
+      return res.status(400).json({ 
+        error: 'Missing required exercise data. Please provide exerciseType and duration.' 
+      });
+    }
+
+    // Burn is optional but if provided, should be a number
+    const burnValue = burn !== undefined ? Number(burn) : 0;
+
+    // Format today's date in "YYYY / MM / DD" format
+    const todayFormatted = getTodayFormatted();
+    
+    // Check if today's entry already exists
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Day',
+        title: {
+          equals: todayFormatted
+        }
+      }
+    });
+    
+    if (response.results.length > 0) {
+      // Today's entry exists, update the exercise data
+      const pageId = response.results[0].id;
+      const existingPage = response.results[0];
+      
+      // Get current values (if they exist)
+      let currentKcal = existingPage.properties['Kcal From Movement'] && 
+                        existingPage.properties['Kcal From Movement'].number !== null ? 
+                        existingPage.properties['Kcal From Movement'].number : 0;
+      
+      // Get current deficit value
+      let currentDeficit = existingPage.properties['Deficit'] && 
+                         existingPage.properties['Deficit'].number !== null ? 
+                         existingPage.properties['Deficit'].number : 1800;
+      
+      // Prepare the exercise properties based on type
+      const exerciseProperties = {};
+      const previousValues = {};
+      const updatedValues = {};
+      
+      if (exerciseType === 'zone2') {
+        // Get current Zone2 values
+        const currentDuration = existingPage.properties['Zone2 Duration'] && 
+                                existingPage.properties['Zone2 Duration'].number !== null ? 
+                                existingPage.properties['Zone2 Duration'].number : 0;
+        
+        let currentDistance = 0;
+        if (distance !== undefined) {
+          currentDistance = existingPage.properties['Zone2 Distance'] && 
+                            existingPage.properties['Zone2 Distance'].number !== null ? 
+                            existingPage.properties['Zone2 Distance'].number : 0;
+        }
+        
+        // Add new values to existing values
+        const updatedDuration = currentDuration + Number(duration);
+        let updatedDistance = currentDistance;
+        if (distance !== undefined) {
+          updatedDistance = currentDistance + Number(distance);
+        }
+        
+        // Set properties
+        exerciseProperties['Zone2 Duration'] = { number: updatedDuration };
+        if (distance !== undefined) {
+          exerciseProperties['Zone2 Distance'] = { number: updatedDistance };
+        }
+        
+        // Save values for response
+        previousValues.duration = currentDuration;
+        previousValues.distance = currentDistance;
+        updatedValues.duration = updatedDuration;
+        updatedValues.distance = updatedDistance;
+      } 
+      else if (exerciseType === 'vo2max') {
+        // For VO2Max, we typically just use the latest value as it's a measurement, not an accumulation
+        exerciseProperties['VO2Max'] = { number: Number(vo2max) };
+        
+        // Save values for response
+        const currentVO2Max = existingPage.properties['VO2Max'] && 
+                              existingPage.properties['VO2Max'].number !== null ? 
+                              existingPage.properties['VO2Max'].number : 0;
+        previousValues.vo2max = currentVO2Max;
+        updatedValues.vo2max = Number(vo2max);
+      }
+      else if (exerciseType === 'gym') {
+        // Get current Gym Duration
+        const currentDuration = existingPage.properties['Gym Duration'] && 
+                                existingPage.properties['Gym Duration'].number !== null ? 
+                                existingPage.properties['Gym Duration'].number : 0;
+        
+        // Add new values to existing values
+        const updatedDuration = currentDuration + Number(duration);
+        
+        // Set properties
+        exerciseProperties['Gym Duration'] = { number: updatedDuration };
+        if (workoutType) {
+          exerciseProperties['Workout Type'] = { 
+            select: { name: workoutType.charAt(0).toUpperCase() + workoutType.slice(1) } 
+          };
+        }
+        
+        // Save values for response
+        previousValues.duration = currentDuration;
+        previousValues.workoutType = workoutType;
+        updatedValues.duration = updatedDuration;
+        updatedValues.workoutType = workoutType;
+      }
+      
+      // Add burn to Kcal From Movement if provided
+      if (burn !== undefined) {
+        const updatedKcal = currentKcal + burnValue;
+        exerciseProperties['Kcal From Movement'] = { number: updatedKcal };
+        
+        // Update deficit by adding burn value
+        const updatedDeficit = currentDeficit + burnValue;
+        exerciseProperties['Deficit'] = { number: updatedDeficit };
+        
+        // Save values for response
+        previousValues.kcal = currentKcal;
+        previousValues.deficit = currentDeficit;
+        updatedValues.kcal = updatedKcal;
+        updatedValues.deficit = updatedDeficit;
+      }
+      
+      // Update the database
+      await notion.pages.update({
+        page_id: pageId,
+        properties: exerciseProperties
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `${exerciseType} exercise data updated for today`,
+        date: todayFormatted,
+        exerciseType: exerciseType,
+        previousValues: previousValues,
+        addedValues: {
+          duration: Number(duration),
+          distance: distance !== undefined ? Number(distance) : null,
+          vo2max: vo2max !== undefined ? Number(vo2max) : null,
+          workoutType: workoutType || null,
+          burn: burnValue
+        },
+        updatedValues: updatedValues
+      });
+    } else {
+      // Today's entry doesn't exist, create it
+      const availableWeeks = await getAllWeeks();
+      const today = new Date();
+      const weekRange = getWeekRangeForDate(today, availableWeeks);
+      
+      // Prepare week multi-select property
+      const weekProperty = weekRange ? {
+        'Week': {
+          multi_select: [
+            {
+              name: weekRange
+            }
+          ]
+        }
+      } : { 'Week': { multi_select: [] } };
+      
+      // Prepare the exercise properties based on type
+      const exerciseProperties = {};
+      const initialDeficit = 1800; // Default deficit value
+      
+      if (exerciseType === 'zone2') {
+        exerciseProperties['Zone2 Duration'] = { number: Number(duration) };
+        if (distance !== undefined) {
+          exerciseProperties['Zone2 Distance'] = { number: Number(distance) };
+        }
+      } 
+      else if (exerciseType === 'vo2max') {
+        exerciseProperties['VO2Max'] = { number: Number(vo2max) };
+      }
+      else if (exerciseType === 'gym') {
+        exerciseProperties['Gym Duration'] = { number: Number(duration) };
+        if (workoutType) {
+          exerciseProperties['Workout Type'] = { 
+            select: { name: workoutType.charAt(0).toUpperCase() + workoutType.slice(1) } 
+          };
+        }
+      }
+      
+      // Calculate deficit including burn
+      let deficitValue = initialDeficit;
+      if (burn !== undefined) {
+        deficitValue = initialDeficit + burnValue;
+        exerciseProperties['Kcal From Movement'] = { number: burnValue };
+      }
+      
+      // Create new entry with exercise data
+      const newPage = await notion.pages.create({
+        parent: { database_id: databaseId },
+        properties: {
+          'Day': {
+            title: [
+              {
+                text: {
+                  content: todayFormatted
+                }
+              }
+            ]
+          },
+          ...exerciseProperties,
+          ...weekProperty,
+          // Initialize other required fields with default values
+          'Protein': { number: 0 },
+          'Carbs': { number: 0 },
+          'Fats': { number: 0 },
+          'Calories': { number: 0 },
+          'Deficit': { number: deficitValue } // Including burn in initial deficit
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `New entry created with ${exerciseType} exercise data for today`,
+        date: todayFormatted,
+        week: weekRange || 'No matching week found',
+        exerciseType: exerciseType,
+        values: {
+          duration: Number(duration),
+          distance: distance !== undefined ? Number(distance) : null,
+          vo2max: vo2max !== undefined ? Number(vo2max) : null,
+          workoutType: workoutType || null,
+          burn: burnValue,
+          deficit: deficitValue
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error logging exercise data:', err);
+    res.status(500).json({ error: 'Error logging exercise data to Notion database: ' + err.message });
+  }
+});
+
+/**
+ * POST /api/bike
+ * Logs cycling data to Notion database
+ */
+app.post('/api/bike', async (req, res) => {
+  try {
+    const { duration, distance, burn } = req.body;
+    
+    // Validate input
+    if (duration === undefined || distance === undefined || burn === undefined) {
+      return res.status(400).json({ 
+        error: 'Missing required cycling data. Please provide duration, distance, and burn.' 
+      });
+    }
+
+    // Format today's date in "YYYY / MM / DD" format
+    const todayFormatted = getTodayFormatted();
+    
+    // Check if today's entry already exists
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Day',
+        title: {
+          equals: todayFormatted
+        }
+      }
+    });
+    
+    if (response.results.length > 0) {
+      // Today's entry exists, update the cycling data
+      const pageId = response.results[0].id;
+      const existingPage = response.results[0];
+      
+      // Get current values (if they exist)
+      const currentKcal = existingPage.properties['Kcal From Movement'] && 
+                          existingPage.properties['Kcal From Movement'].number !== null ? 
+                          existingPage.properties['Kcal From Movement'].number : 0;
+      
+      const currentDuration = existingPage.properties['Cycling Duration'] && 
+                              existingPage.properties['Cycling Duration'].number !== null ? 
+                              existingPage.properties['Cycling Duration'].number : 0;
+      
+      const currentDistance = existingPage.properties['Cycling Distance'] && 
+                              existingPage.properties['Cycling Distance'].number !== null ? 
+                              existingPage.properties['Cycling Distance'].number : 0;
+                              
+      // Get current deficit value
+      const currentDeficit = existingPage.properties['Deficit'] && 
+                             existingPage.properties['Deficit'].number !== null ? 
+                             existingPage.properties['Deficit'].number : 1800;
+      
+      // Add new values to existing values
+      const updatedKcal = currentKcal + Number(burn);
+      const updatedDuration = currentDuration + Number(duration);
+      const updatedDistance = currentDistance + Number(distance);
+      const updatedDeficit = currentDeficit + Number(burn);
+      
+      // Prepare the cycling properties with accumulated values
+      const cyclingProperties = {
+        'Cycling Duration': { number: updatedDuration },
+        'Cycling Distance': { number: updatedDistance },
+        'Kcal From Movement': { number: updatedKcal },
+        'Deficit': { number: updatedDeficit }
+      };
+      
+      await notion.pages.update({
+        page_id: pageId,
+        properties: cyclingProperties
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'Cycling data updated for today',
+        date: todayFormatted,
+        previousValues: {
+          duration: currentDuration,
+          distance: currentDistance,
+          kcal: currentKcal,
+          deficit: currentDeficit
+        },
+        addedValues: {
+          duration: Number(duration),
+          distance: Number(distance),
+          burn: Number(burn)
+        },
+        newTotals: {
+          duration: updatedDuration,
+          distance: updatedDistance,
+          kcal: updatedKcal,
+          deficit: updatedDeficit
+        }
+      });
+    } else {
+      // Today's entry doesn't exist, create it
+      const availableWeeks = await getAllWeeks();
+      const today = new Date();
+      const weekRange = getWeekRangeForDate(today, availableWeeks);
+      
+      // Prepare week multi-select property
+      const weekProperty = weekRange ? {
+        'Week': {
+          multi_select: [
+            {
+              name: weekRange
+            }
+          ]
+        }
+      } : { 'Week': { multi_select: [] } };
+      
+      // Calculate initial deficit including burn
+      const initialDeficit = 1800;
+      const deficitValue = initialDeficit + Number(burn);
+      
+      // Prepare the cycling properties (for new entry, just use the provided values directly)
+      const cyclingProperties = {
+        'Cycling Duration': { number: Number(duration) },
+        'Cycling Distance': { number: Number(distance) },
+        'Kcal From Movement': { number: Number(burn) }
+      };
+      
+      // Create new entry with cycling data
+      const newPage = await notion.pages.create({
+        parent: { database_id: databaseId },
+        properties: {
+          'Day': {
+            title: [
+              {
+                text: {
+                  content: todayFormatted
+                }
+              }
+            ]
+          },
+          ...cyclingProperties,
+          ...weekProperty,
+          // Initialize other required fields with default values
+          'Protein': { number: 0 },
+          'Carbs': { number: 0 },
+          'Fats': { number: 0 },
+          'Calories': { number: 0 },
+          'Deficit': { number: deficitValue }
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: 'New entry created with cycling data for today',
+        date: todayFormatted,
+        week: weekRange || 'No matching week found',
+        values: {
+          duration: Number(duration),
+          distance: Number(distance),
+          kcal: Number(burn),
+          deficit: deficitValue
+        }
+      });
+    }
+  } catch (err) {
+    console.error('Error logging cycling data:', err);
+    res.status(500).json({ error: 'Error logging cycling data to Notion database: ' + err.message });
+  }
+});
+
+/* [SLEEP] */
+
+app.post('/api/sleep', async (req, res) => {
+  try {
+    const { 
+      sleepType,        // 'duration' or 'timing'
+      sleepQuality,     // for duration (poor, fair, good, excellent)
+      bedTime,          // for timing (HH:MM)
+      wakeTime,         // for timing (HH:MM)
+      sleepWindow       // for timing (calculated, e.g. "8h 30m")
+    } = req.body;
+    
+    // Validate input
+    if (!sleepType) {
+      return res.status(400).json({ error: 'Missing required sleep type.' });
+    }
+    
+    if (sleepType === 'duration' && !sleepQuality) {
+      return res.status(400).json({ error: 'For duration tracking, please provide sleepQuality.' });
+    }
+    
+    if (sleepType === 'timing' && (!bedTime || !wakeTime)) {
+      return res.status(400).json({ error: 'For timing tracking, please provide both bedTime and wakeTime.' });
+    }
+
+    // Format today's date in "YYYY / MM / DD" format
+    const todayFormatted = getTodayFormatted();
+    
+    // Check if today's entry already exists
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Day',
+        title: {
+          equals: todayFormatted
+        }
+      }
+    });
+    
+    // Prepare the sleep properties based on type
+    const sleepProperties = {};
+    
+    if (sleepType === 'duration') {
+      sleepProperties['Sleep Quality'] = { 
+        select: { 
+          name: sleepQuality.charAt(0).toUpperCase() + sleepQuality.slice(1) // Capitalize first letter
+        } 
+      };
+    } 
+    else if (sleepType === 'timing') {
+      sleepProperties['Bed Time'] = { rich_text: [{ text: { content: bedTime } }] };
+      sleepProperties['Wake Time'] = { rich_text: [{ text: { content: wakeTime } }] };
+      if (sleepWindow) {
+        sleepProperties['Sleep Window'] = { rich_text: [{ text: { content: sleepWindow } }] };
+      }
+    }
+    
+    if (response.results.length > 0) {
+      // Today's entry exists, update the sleep data
+      const pageId = response.results[0].id;
+      
+      await notion.pages.update({
+        page_id: pageId,
+        properties: sleepProperties
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `Sleep ${sleepType} data updated for today`,
+        date: todayFormatted,
+        sleepData: req.body
+      });
+    } else {
+      // Today's entry doesn't exist, create it
+      const availableWeeks = await getAllWeeks();
+      const today = new Date();
+      const weekRange = getWeekRangeForDate(today, availableWeeks);
+      
+      // Prepare week multi-select property
+      const weekProperty = weekRange ? {
+        'Week': {
+          multi_select: [
+            {
+              name: weekRange
+            }
+          ]
+        }
+      } : { 'Week': { multi_select: [] } };
+      
+      // Create new entry with sleep data
+      const newPage = await notion.pages.create({
+        parent: { database_id: databaseId },
+        properties: {
+          'Day': {
+            title: [
+              {
+                text: {
+                  content: todayFormatted
+                }
+              }
+            ]
+          },
+          ...sleepProperties,
+          ...weekProperty,
+          // Initialize other required fields with default values
+          'Protein': { number: 0 },
+          'Carbs': { number: 0 },
+          'Fats': { number: 0 },
+          'Calories': { number: 0 },
+          'Deficit': { number: 1800},
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `New entry created with sleep ${sleepType} data for today`,
+        date: todayFormatted,
+        week: weekRange || 'No matching week found',
+        sleepData: req.body
+      });
+    }
+  } catch (err) {
+    console.error('Error logging sleep data:', err);
+    res.status(500).json({ error: 'Error logging sleep data to Notion database: ' + err.message });
+  }
+});
+
+/**
+ * GET /api/sleep
+ * Gets today's sleep data if it exists
+ */
+app.get('/api/sleep', async (req, res) => {
+  try {
+    // Format today's date in "YYYY / MM / DD" format
+    const todayFormatted = getTodayFormatted();
+    
+    // Query to find today's entry
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      filter: {
+        property: 'Day',
+        title: {
+          equals: todayFormatted
+        }
+      }
+    });
+    
+    if (response.results.length > 0) {
+      const page = response.results[0];
+      
+      // Extract sleep data
+      const sleepHours = (page.properties['Sleep Hours'] && page.properties['Sleep Hours'].number) || null;
+      
+      let sleepQuality = null;
+      if (page.properties['Sleep Quality'] && 
+          page.properties['Sleep Quality'].select && 
+          page.properties['Sleep Quality'].select.name) {
+        sleepQuality = page.properties['Sleep Quality'].select.name.toLowerCase();
+      }
+      
+      let bedTime = null;
+      if (page.properties['Bed Time'] && 
+          page.properties['Bed Time'].rich_text && 
+          page.properties['Bed Time'].rich_text.length > 0) {
+        bedTime = page.properties['Bed Time'].rich_text[0].plain_text;
+      }
+      
+      let wakeTime = null;
+      if (page.properties['Wake Time'] && 
+          page.properties['Wake Time'].rich_text && 
+          page.properties['Wake Time'].rich_text.length > 0) {
+        wakeTime = page.properties['Wake Time'].rich_text[0].plain_text;
+      }
+      
+      res.json({
+        success: true,
+        date: todayFormatted,
+        sleepData: {
+          sleepHours,
+          sleepQuality,
+          bedTime,
+          wakeTime
+        }
+      });
+    } else {
+      // No entry for today
+      res.json({
+        success: true,
+        date: todayFormatted,
+        sleepData: null,
+        message: 'No sleep data logged for today'
+      });
+    }
+  } catch (err) {
+    console.error('Error fetching sleep data:', err);
+    res.status(500).json({ error: 'Error fetching sleep data' });
   }
 });
 

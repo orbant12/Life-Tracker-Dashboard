@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 // Define types
-type ViewOption = 'food' | 'weight' | 'exercise';
+type ViewOption = 'food' | 'weight' | 'exercise' | 'sleep';
 type Week = string;
 
 interface DeficitData {
@@ -42,6 +42,11 @@ return (
         { viewOption == 'exercise' &&
             <ExercisePanel />
         }
+
+        { viewOption == 'sleep' &&
+            <SleepPanel />
+        }
+
 
     </div>
   );
@@ -322,11 +327,15 @@ const FoodPanel = ({
 
 import { TrendingUp, TrendingDown, Scale, Target, ArrowRight, Zap } from 'lucide-react';
 import ExercisePanel from '../components/exercisePanel';
+import SleepPanel from '../components/sleepPanel';
 
 const WeightPanel = () => {
   const [weight, setWeight] = useState('');
   const [submitted, setSubmitted] = useState(false);
-  const [feeling, setFeeling] = useState<any>(null);
+  const [isPoop, setIsPoop] = useState(false)
+  const [isBloated, setIsBloated] = useState(false)
+  const [isWatery, setIsWatery] = useState(false)
+  const [isBadSleep, setIsBadSleep] = useState(false)
   
   const feelings = [
     { emoji: '💩', label: 'Poop', color: 'bg-amber-50 border-amber-200' },
@@ -337,14 +346,36 @@ const WeightPanel = () => {
   
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (weight && feeling !== null) {
+    if (weight !== null) {
       setSubmitted(true);
-      // Here you would typically save to a database
-      setTimeout(() => {
-        setSubmitted(false);
-        setWeight('');
-        setFeeling(null);
-      }, 3000);
+
+      fetch('/api/weight', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          weight: parseFloat(weight),
+          bloated: isBloated,
+          poop:isPoop,
+          watery: isWatery,
+          isBadSleep: isBadSleep
+        }),
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Weight saved successfully:', data);
+      })
+      .catch(error => {
+        console.error('Error saving weight:', error);
+      })
+      .finally(() => {
+        setTimeout(() => {
+          setSubmitted(false);
+          setWeight('');
+          
+        }, 3000);
+      });
     }
   };
   
@@ -353,7 +384,19 @@ const WeightPanel = () => {
     month: 'long', 
     day: 'numeric' 
   });
-  
+
+  const handleToggle = (name) => {
+    if(name == "Poop"){
+        setIsPoop(!isPoop)
+    } else if (name == "Bad Sleep"){
+        setIsBadSleep(!isBadSleep)
+    } else if (name == "Watery"){
+        setIsWatery(!isWatery)
+    } else if (name == "Bloated"){
+        setIsBloated(!isBloated)
+    }
+  }
+
   return (
     <div className="w-full bg-white to-indigo-50 p-6 rounded-xl shadow-lg">
       <div className="max-w-2xl mx-auto">
@@ -371,9 +414,15 @@ const WeightPanel = () => {
           {feelings.map((item, index) => (
             <div
               key={index}
-              onClick={() => {feeling == index ? setFeeling(null) : setFeeling(index)}}
+              onClick={() => {
+                item.label == "Poop" && setIsPoop(true)
+                item.label == "Bloated" && setIsBloated(true)
+                item.label == "Watery" && setIsWatery(true)
+                item.label == "Bad Sleep" && setIsBadSleep(true)
+                handleToggle(item.label)
+            }}
               className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
-                feeling === index 
+                item.label === "Poop" && isPoop || item.label === "Bad Sleep" && isBadSleep || item.label === "Bloated" && isBloated || item.label === "Watery" && isWatery
                   ? 'border-indigo-500 shadow-md transform scale-105' 
                   : `border-gray-200 ${item.color}`
               }`}
@@ -406,10 +455,11 @@ const WeightPanel = () => {
             
             <div
               className={`flex w-[100%] items-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
-                !weight || feeling === null
+                weight === ''
                   ? 'bg-gray-300 cursor-not-allowed'
                   : 'bg-indigo-600 hover:bg-indigo-700'
               }`}
+              onClick={handleSubmit}
             >
               <span className='text-center' >Log Weight</span>
               <ArrowRight size={16} />
@@ -539,7 +589,8 @@ const ViewToggle: React.FC<ViewToggleProps> = ({ viewOption, onChange }) => {
   const options: { value: ViewOption; label: string }[] = [
     { value: 'food', label: 'Food' },
     { value: 'weight', label: 'Weight' },
-    { value: 'exercise', label: 'Exercise' }
+    { value: 'exercise', label: 'Movement' },
+    { value: 'sleep', label: 'Sleep' }
   ];
 
   // Handle option change
