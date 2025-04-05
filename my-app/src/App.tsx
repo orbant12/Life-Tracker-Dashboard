@@ -18,19 +18,13 @@ interface NavItem {
 function App() {
   // Define navigation items with children for Nutrition dropdown
   const navItems: NavItem[] = [
-    { path: '/', label: 'Home', icon: '🏠' },
     { 
-      path: '/nutrition', 
-      label: 'Nutrition', 
-      icon: '🍏',
-      children: [
-        { path: '/nutrition/lognew', label: '+ Log New' },
-        { path: '/nutrition/tracking', label: 'Tracking' },
-        { path: '/nutrition/recipes', label: 'Recipes' }
-      ] 
+      path: '/lognew', 
+      label: 'Log New', 
+      icon: '➕',
     },
-    { path: '/profile', label: 'Profile', icon: '👤' },
-    { path: '/settings', label: 'Settings', icon: '⚙️' },
+    { path: '/', label: 'Tracker', icon: '🏠' },
+
   ];
 
   return (
@@ -39,14 +33,14 @@ function App() {
         <SideNav navItems={navItems} />
         <main className="content">
           <Routes>
-            <Route path="/" element={<Home />} />
+            <Route path="/s" element={<Home />} />
             <Route path="/dashboard" element={<div>Dashboard Page</div>} />
-            <Route path="/nutrition/lognew" element={ <LogNew /> } />
+            <Route path="/lognew" element={ <LogNew /> } />
             <Route path="/nutrition/macros" element={<div>Macro Tracking Page</div>} />
             <Route path="/nutrition/recipes" element={<div>Recipes Page</div>} />
             <Route path="/profile" element={<div>Profile Page</div>} />
             <Route path="/settings" element={<div>Settings Page</div>} />
-            <Route path='/nutrition/tracking' element={<DeficitStats />} />
+            <Route path='/' element={<DeficitStats />} />
           </Routes>
         </main>
       </div>

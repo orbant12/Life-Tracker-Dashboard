@@ -197,8 +197,8 @@ const SleepPanel = () => {
   // Helper functions
   const calculateSleepWindow = (bedTime, wakeTime) => {
     try {
-      const bedDate = new Date(`2000-01-01T${bedTime}`);
-      let wakeDate = new Date(`2000-01-01T${wakeTime}`);
+      const bedDate:any = new Date(`2000-01-01T${bedTime}`);
+      let wakeDate:any = new Date(`2000-01-01T${wakeTime}`);
       
       // Adjust if wake time is on the next day
       if (wakeDate < bedDate) {
@@ -265,7 +265,7 @@ const SleepPanel = () => {
           
           <div className="mt-6 flex justify-between items-center">
             <div
-              onClick={isCurrentTabEmpty() || isLoading ? null : handleSubmit}
+              onClick={() => isCurrentTabEmpty() || isLoading ? null : handleSubmit()}
               className={`flex w-full items-center justify-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
                 isCurrentTabEmpty() || isLoading
                   ? 'bg-gray-300 cursor-not-allowed'

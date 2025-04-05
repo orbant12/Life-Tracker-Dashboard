@@ -74,6 +74,145 @@ function getDailyStats(data, typeString) {
   return totalDeficit;
 }
 
+function getDailyStatsSelect(data, typeString) {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const dayToMatch = `${year} / ${month} / ${day}`;
+
+  let totalDeficit = false;
+  data.results.forEach((page) => {
+    const dayProp = page.properties['Day'];
+    if (dayProp && Array.isArray(dayProp.title)) {
+      dayProp.title.forEach((titleObj) => {
+        if (titleObj.plain_text === dayToMatch) {
+          const deficitProperty = page.properties[typeString];
+          if (deficitProperty) {
+            totalDeficit = deficitProperty.select;
+          }
+        }
+      });
+    }
+  });
+  return totalDeficit;
+}
+
+
+function getDailyStatsString(data, typeString) {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const dayToMatch = `${year} / ${month} / ${day}`;
+
+  let totalDeficit = false;
+  data.results.forEach((page) => {
+    const dayProp = page.properties['Day'];
+    if (dayProp && Array.isArray(dayProp.title)) {
+      dayProp.title.forEach((titleObj) => {
+        if (titleObj.plain_text === dayToMatch) {
+          const deficitProperty = page.properties[typeString];
+          if (deficitProperty) {
+            totalDeficit = deficitProperty.rich_text;
+          }
+        }
+      });
+    }
+  });
+  return totalDeficit;
+}
+
+function getDailyStatsBool(data, typeString) {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const dayToMatch = `${year} / ${month} / ${day}`;
+
+  let totalDeficit = false;
+  data.results.forEach((page) => {
+    const dayProp = page.properties['Day'];
+    if (dayProp && Array.isArray(dayProp.title)) {
+      dayProp.title.forEach((titleObj) => {
+        if (titleObj.plain_text === dayToMatch) {
+          const deficitProperty = page.properties[typeString];
+          if (deficitProperty && typeof deficitProperty.checkbox === 'boolean') {
+            totalDeficit = deficitProperty.checkbox;
+          }
+        }
+      });
+    }
+  });
+  return totalDeficit;
+}
+
+function getDayBeforeWeight(data, typeString) {
+  // Get current date
+  const today = new Date();
+  
+  // Calculate yesterday's date
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  
+  // Format the day we're looking for
+  let dayToMatch;
+  
+  // Handle first day of month
+  if (today.getDate() === 1) {
+    // If it's the first day of the month, we need the last day of the previous month
+    
+    // Handle first month of year (January)
+    if (today.getMonth() === 0) {
+      // If it's January 1st, we need December 31st of the previous year
+      const lastYear = today.getFullYear() - 1;
+      dayToMatch = `December 31, ${lastYear}`;
+    } else {
+      // For other months, get the last day of the previous month
+      const previousMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+      const monthNames = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      const prevMonthName = monthNames[previousMonth.getMonth()];
+      const prevMonthDay = previousMonth.getDate();
+      const year = today.getFullYear();
+      
+      dayToMatch = `${prevMonthName} ${prevMonthDay}, ${year}`;
+    }
+  } else {
+    // Regular case - just yesterday's date
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const yesterdayMonth = (yesterday.getMonth() + 1).toString().padStart(2, '0');
+    const yesterdayDay = String(yesterday.getDate()).padStart(2, '0');
+    const year = yesterday.getFullYear();
+    
+    dayToMatch = `${year} / ${yesterdayMonth} / ${yesterdayDay}`;
+    console.log("dayToMatch", dayToMatch);
+  }
+  
+  // Calculate total from matching records
+  let totalDeficit = 0;
+  data.results.forEach((page) => {
+    const dayProp = page.properties['Day'];
+    if (dayProp && Array.isArray(dayProp.title)) {
+      dayProp.title.forEach((titleObj) => {
+        if (titleObj.plain_text === dayToMatch) {
+          const deficitProperty = page.properties[typeString];
+          if (deficitProperty && typeof deficitProperty.number === 'number') {
+            totalDeficit += deficitProperty.number;
+          }
+        }
+      });
+    }
+  });
+  
+  return totalDeficit;
+}
+
 /**
  * Calculate the weekly deficit for the given "weekName" (e.g. "[MARCH] 3-9").
  */
@@ -1761,6 +1900,80 @@ app.get('/api/sleep', async (req, res) => {
     res.status(500).json({ error: 'Error fetching sleep data' });
   }
 });
+
+
+app.get('/api/tracker', async(req,res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    const dailyCal= await getDailyStats(response, 'Calories');
+    const dailyDef= await getDailyStats(response, 'Deficit');
+    const dailyProt= await getDailyStats(response, 'Protein');
+    const dailyCarb= await getDailyStats(response, 'Carbs');
+    const dailyFat= await getDailyStats(response, 'Fats');
+
+    const dailyStep= await getDailyStats(response, 'Steps');
+    const dailyKcalFromMov= await getDailyStats(response, 'Kcal From Movement');
+  
+    const dailyZone2Dur= await getDailyStats(response, 'Zone2 Duration');
+    const dailyZone2Dist= await getDailyStats(response, 'Zone2 Distance');
+    const dailyCycleDist= await getDailyStats(response, 'Cycling Distance');
+    const dailyCycleDur= await getDailyStats(response, 'Cycling Duration');
+    const dailyWType= await getDailyStats(response, 'Workout Type');
+    const dailyWDur= await getDailyStats(response, 'Gym Duration');
+
+    const dailyWeight= await getDailyStats(response, 'Weight');
+    const weightDayBefore = await getDayBeforeWeight(response, 'Weight');
+
+    const dailyIsPoop = await getDailyStatsBool(response, 'Poop');
+    const dailyIsBloated = await getDailyStatsBool(response, 'Bloated');
+    const dailyIsWatery = await getDailyStatsBool(response, 'Watery');
+    const dailyIsBadSleep = await getDailyStatsBool(response, 'Bad Sleep');
+
+    const dailyBedTime = await getDailyStatsString(response, 'Bed Time');
+    const dailyWakeTime = await getDailyStatsString(response, 'Wake Time');
+    const dailySleepQuality = await getDailyStatsSelect(response, 'Sleep Quality');
+    const dailySleepHours = await getDailyStatsString(response, 'Sleep Window');
+    
+
+    console.log(dailySleepQuality)
+    const result = {
+      protein: Math.round(dailyProt),
+      fat: Math.round(dailyFat),
+      carbs: Math.round(dailyCarb),
+      calories: Math.round(dailyCal),
+      deficit: Math.round(dailyDef),
+      steps: Math.round(dailyStep),
+      kcalFromMovement: Math.round(dailyKcalFromMov),
+      zone2Dur:dailyZone2Dur,
+      zone2Distance: dailyZone2Dist,
+      cycleDist:dailyCycleDist,
+      cycleDur:dailyCycleDur,
+      workType:dailyWType,
+      workDur:dailyWDur,
+      weight: dailyWeight,
+      weightDayBefore: weightDayBefore,
+      isPoop: dailyIsPoop,
+      isBloated: dailyIsBloated,
+      isWatery: dailyIsWatery,
+      isBadSleep: dailyIsBadSleep,
+      bedTime: dailyBedTime[0].text.content,
+      wakeTime: dailyWakeTime[0].text.content,
+      sleepQuality: dailySleepQuality.name,
+      sleepHours: dailySleepHours[0].text.content,
+
+    }
+    console.log(result)
+    res.json({result});
+  } catch (err) {
+    console.error('Error fetching deficits:', err);
+    res.status(500).json({ error: 'Error fetching deficits' });
+  }
+})
+
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

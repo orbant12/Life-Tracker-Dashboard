@@ -4,7 +4,7 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Modal from '@mui/material/Modal';
 import { useScatterChartProps } from '@mui/x-charts/internals';
-import { getBox } from './boxCondition';
+import { getBox, getSaladBox } from './boxCondition';
 
 const style = {
   position: 'absolute',
@@ -31,7 +31,7 @@ export default function BasicModal({foodData, handleLogAmmount}) {
   const [addedFats, setAddedFats] = React.useState(0)
   const [addedProtein, setAddedProtein] = React.useState(0)
   const [addedCarbs, setAddedCarbs] = React.useState(0)
-  const [isPiece, setIsPiece] = React.useState(false)
+  const [isPiece, setIsPiece] = React.useState<boolean | null>(false)
   const [isLoading, setIsLoading] = React.useState(false); // New loading state
 
   const handleOpen = (item) => {
@@ -82,16 +82,30 @@ export default function BasicModal({foodData, handleLogAmmount}) {
     }
   }
 
-  const [currBox, setCurrBox] = React.useState([{title:"2 Eggs",multiplier:2},{title:"3 Eggs",multiplier:3},{title:"4 Eggs",multiplier:4}])
+  interface Box {
+    title: string;
+    multiplier: any;
+    isPiece: boolean;
+  }
 
+  const [currBox, setCurrBox] = React.useState<Box[]>([{title:"2 Eggs",multiplier:2,isPiece:true},{title:"3 Eggs",multiplier:3,isPiece:true},{title:"4 Eggs",multiplier:4,isPiece:true}])
+  const [activeCal, setActiveCal] = React.useState(0)
   const handleBoxes = (item) => {
     setAddedCal(0)
     setAddedCarbs(0)
     setAddedFats(0)
     setAddedProtein(0)
-    const response: any = getBox(item.food);
-    setIsPiece(response.isPiece)
-    setCurrBox(response.options)
+    //If item.food incule 🥗
+    if(item.food.includes("🥗")) {
+      const response: any = getSaladBox(item.food);
+      setIsPiece(null)
+      setCurrBox(response.options)
+      return
+    }else{
+      const response: any = getBox(item.food);
+      setIsPiece(response.isPiece)
+      setCurrBox(response.options)
+    }
   }
 
   return (
@@ -153,37 +167,58 @@ export default function BasicModal({foodData, handleLogAmmount}) {
                     <span className='font-[700] text-xl text-center'>{addedCarbs}</span>
                 </div>
             </div>  
+            {isPiece != null ? (
             <SelectAble 
                 boxes={currBox}
                 handlePress={(n) => {
+                    setActiveCal(n * cal);
                     setAddedCal(Math.round(n * cal));
                     setAddedCarbs(Math.round(n * carbs));
                     setAddedFats(Math.round(n * fats));
                     setAddedProtein(Math.round(n * protein));
                 }}
-                active={addedCal}
+                active={activeCal}
                 cal={cal}
             
-            />
-            <h2 className='font-[700] text-xl opacity-50 text-center m-10'>Or</h2>
-            <InputCalories 
-                title={nameTitle}
-                handleAdd={handleAddNew}
-                setValue={(n) => {
-                    if (isPiece) {
-                        setAddedCal(Math.round(n * cal));
-                        setAddedCarbs(Math.round(n * carbs));
-                        setAddedFats(Math.round(n * fats));
-                        setAddedProtein(Math.round(n * protein));
-                    } else {
-                        setAddedCal(Math.round(n* (cal / 100)));
-                        setAddedCarbs(Math.round(n * (carbs / 100)));
-                        setAddedFats(Math.round(n * (fats / 100)));
-                        setAddedProtein(Math.round(n * (protein / 100)));
-                    }
+            /> ) : (
+              <SelectAbleSalad 
+                boxes={currBox}
+                handlePress={(n) => {
+                    setActiveCal(n.calories);
+                    setAddedCal(n.calories);
+                    setAddedCarbs(n.carbs);
+                    setAddedFats(n.fats);
+                    setAddedProtein(n.protein);
                 }}
-                isLoading={isLoading}
-            />
+                active={activeCal}
+                cal={cal}
+              />
+            )
+              }
+            { isPiece != null && <h2 className='font-[700] text-xl opacity-50 text-center m-10'>Or</h2>}
+            {isPiece != null &&
+              <InputCalories 
+                  title={nameTitle}
+                  isPiece={isPiece}
+                  handleAdd={handleAddNew}
+                  setValue={(n) => {
+                      if (isPiece) {
+                          setActiveCal(n * cal);
+                          setAddedCal(Math.round(n * cal));
+                          setAddedCarbs(Math.round(n * carbs));
+                          setAddedFats(Math.round(n * fats));
+                          setAddedProtein(Math.round(n * protein));
+                      } else {
+                          setActiveCal(n* (cal / 100));
+                          setAddedCal(Math.round(n* (cal / 100)));
+                          setAddedCarbs(Math.round(n * (carbs / 100)));
+                          setAddedFats(Math.round(n * (fats / 100)));
+                          setAddedProtein(Math.round(n * (protein / 100)));
+                      }
+                  }}
+                  isLoading={isLoading}
+              />
+              }
           </Typography>
         </Box>
       </Modal>
@@ -195,7 +230,8 @@ export const InputCalories = ({
     title,
     setValue,
     handleAdd,
-    isLoading
+    isLoading,
+    isPiece
 }) => {
 
     const [val, setVal] = React.useState(0)
@@ -213,7 +249,7 @@ export const InputCalories = ({
                     htmlFor="egg-input" 
                     className="block text-sm font-bold opacity-70 text-gray-700"
                 >
-                    Number of {title}:
+                    {isPiece ? "Number" : "Grams"} of {title}:
                 </label>
             </div>
             <div className="flex flex-row items-center mb-3">
@@ -271,6 +307,23 @@ export const SelectAble = ({
           
         </div>
     )
+}
+
+export const SelectAbleSalad = ({
+  boxes,
+  handlePress,
+  active,
+  cal
+}) => {
+
+  return(
+      <div className='w-full p-4 flex flex-row justify-center mb-5'>
+          {boxes.map((data) => 
+              selectBox({title:data.title, handlePress:handlePress,multiplier:data.multiplier,active:active / cal})
+          )}
+        
+      </div>
+  )
 }
 
 const selectBox = ({title,handlePress, multiplier,active}) => {
