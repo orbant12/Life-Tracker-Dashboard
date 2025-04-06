@@ -102,12 +102,12 @@ const ActivitySummary = ({ data }) => {
                 {item.icon}
               </div>
               <div>
-                <p className="font-medium text-gray-800">{item.name}</p>
-                <p className="text-xs text-gray-500">{item.description}</p>
+                <p className="font-medium text-gray-800 text-left">{item.name}</p>
+                {item.servingSize != null && <p className="text-xs text-gray-500 mt-3 text-left"> <span className='font-bold'>{item.servingSize}</span> • Protein: {item.protein}g • Fats: {item.fats}g • Carbs: {item.carbs}g </p>}
               </div>
             </div>
             <div className="flex items-center">
-              <p className="font-semibold">{item.value}</p>
+              <p className="font-semibold">{item.calories} cal</p>
               <ChevronRight className="h-4 w-4 text-gray-400 ml-2" />
             </div>
           </div>
@@ -120,6 +120,7 @@ const ActivitySummary = ({ data }) => {
 // Main Exercise Tracker Panel
 const FoodTrackerPanel2 = () => {
   const [currWeight, setCurrWeight] = useState(0);
+  const [foodList, setFoodList] = useState([])
    const [overall,setOverall] = useState<any[]>([
           {
             name: 'Protein',
@@ -163,6 +164,9 @@ const FoodTrackerPanel2 = () => {
                 ]);
 
                 setCurrWeight(data.result.weight);
+
+                setFoodList(data.result.foodList)
+                console.log(data.result.foodList)
                     
          
               } catch (err) {
@@ -229,7 +233,7 @@ const FoodTrackerPanel2 = () => {
         </div>
         
         <div className="mt-5 mb-5 w-[90%]">
-          <ActivitySummary data={[]} />
+          <ActivitySummary data={foodList} />
         </div>
       </div>
       </>

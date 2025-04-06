@@ -191,7 +191,7 @@ function getDayBeforeWeight(data, typeString) {
     const year = yesterday.getFullYear();
     
     dayToMatch = `${year} / ${yesterdayMonth} / ${yesterdayDay}`;
-    console.log("dayToMatch", dayToMatch);
+    
   }
   
   // Calculate total from matching records
@@ -481,7 +481,6 @@ app.post('/api/nutrition', async (req, res) => {
 async function ensureFoodDatabaseExists() {
   // Check if we have the food database ID in env
   if (!process.env.NOTION_FOOD_DATABASE_ID) {
-    console.log("Creating food database as it doesn't exist...");
     
     try {
       // Create the food database directly in the workspace root
@@ -515,7 +514,7 @@ async function ensureFoodDatabaseExists() {
             number: {}
           },
           "Serving Size": {
-            rich_text: {}
+            number: {}
           },
           "Serving Unit": {
             rich_text: {}
@@ -526,7 +525,6 @@ async function ensureFoodDatabaseExists() {
         }
       });
       
-      console.log("Food database created with ID:", newDb.id);
       
       // Store the ID (in memory for now)
       process.env.NOTION_FOOD_DATABASE_ID = newDb.id;
@@ -582,9 +580,7 @@ app.post('/api/foods', async (req, res) => {
         'Carbs': { number: Number(carbs) },
         'Fats': { number: Number(fats) },
         'Calories': { number: Number(calories) },
-        'Serving Size': { 
-          rich_text: [{ text: { content: servingSize || 'standard' } }]
-        },
+        'Serving Size': { number: Number(servingSize)},
         'Serving Unit': { 
           rich_text: [{ text: { content: servingUnit || 'serving' } }]
         },
@@ -653,7 +649,7 @@ app.post('/api/foods', async (req, res) => {
           carbs: Number(carbs),
           fats: Number(fats),
           calories: Number(calories),
-          servingSize: servingSize || 'standard',
+          servingSize: Number(servingSize),
           servingUnit: servingUnit || 'serving',
           date: todayFormatted
         },
@@ -710,7 +706,7 @@ app.post('/api/foods', async (req, res) => {
           carbs: Number(carbs),
           fats: Number(fats),
           calories: Number(calories),
-          servingSize: servingSize || 'standard',
+          servingSize: Number(servingSize),
           servingUnit: servingUnit || 'serving',
           date: todayFormatted
         },
@@ -1901,6 +1897,51 @@ app.get('/api/sleep', async (req, res) => {
   }
 });
 
+const getDailyFoods = (data) => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  const dateToMatch = `${year} / ${month} / ${day}`;
+
+  let todaysFoods = [];
+  let totalCal = 0;
+  
+  data.results.forEach((page) => {
+    const dateAddedProp = page.properties['Date Added'];
+    
+    // Check if the date matches today's date
+    if ( dateAddedProp.rich_text[0].plain_text === dateToMatch) {
+      
+      // Extract food information
+      const food = {
+        name: page.properties['Name'].title[0]?.plain_text || '',
+        protein: page.properties['Protein'].number || 0,
+        carbs: page.properties['Carbs'].number || 0,
+        fats: page.properties['Fats'].number || 0,
+        calories: page.properties['Calories'].number || 0,
+        servingSize: page.properties['Serving Size'].number || 0,
+        servingUnit: page.properties['Serving Unit'].rich_text[0].plain_text || 'g'
+      };
+      
+      totalCal += page.properties['Calories'].number || 0,
+      todaysFoods.push(food);
+    }
+  });
+  const cal = {
+    name: "Total Calories",
+    protein:null,
+    carbs:null,
+    fats:null,
+    calories:totalCal,
+    servingSize:null,
+    servingUnit: null,
+  }
+  todaysFoods.push(cal)
+  return todaysFoods;
+};
+
+const foodDatabaseId = process.env.NOTION_FOOD_DATABASE_ID;
 
 app.get('/api/tracker', async(req,res) => {
   try {
@@ -1908,6 +1949,11 @@ app.get('/api/tracker', async(req,res) => {
       database_id: databaseId,
       page_size: 100, // adjust if needed
     });
+
+    const foodResponse = await notion.databases.query({
+      database_id: foodDatabaseId, 
+      page_size: 100,
+    })
 
     const dailyCal= await getDailyStats(response, 'Calories');
     const dailyDef= await getDailyStats(response, 'Deficit');
@@ -1937,9 +1983,9 @@ app.get('/api/tracker', async(req,res) => {
     const dailyWakeTime = await getDailyStatsString(response, 'Wake Time');
     const dailySleepQuality = await getDailyStatsSelect(response, 'Sleep Quality');
     const dailySleepHours = await getDailyStatsString(response, 'Sleep Window');
-    
 
-    console.log(dailySleepQuality)
+    const dailyFoods = await getDailyFoods(foodResponse)
+    
     const result = {
       protein: Math.round(dailyProt),
       fat: Math.round(dailyFat),
@@ -1964,9 +2010,10 @@ app.get('/api/tracker', async(req,res) => {
       wakeTime: dailyWakeTime[0].text.content,
       sleepQuality: dailySleepQuality.name,
       sleepHours: dailySleepHours[0].text.content,
+      foodList: dailyFoods
 
     }
-    console.log(result)
+    
     res.json({result});
   } catch (err) {
     console.error('Error fetching deficits:', err);

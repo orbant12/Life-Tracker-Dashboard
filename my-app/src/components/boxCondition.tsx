@@ -146,7 +146,16 @@ export const getBox = (title) => {
             options: [{title: "Small", multiplier: 2.5}, {title: "Half", multiplier: 5}, {title: "Full", multiplier: 10}],
             isPiece: false
         }
-
+    } else if (title == "🍚 Black Rice [NOT COOKED]"){
+        return {
+            options: [{title: "One Portion", multiplier: 0.8}, {title: "Half", multiplier: 2}, {title: "Whole", multiplier: 4}],
+            isPiece: false
+        }
+    } else if (title == "🍚 Black Rice [COOKED]"){
+        return {
+            options: [{title: "One Portion", multiplier: 2.4}, {title: "Half", multiplier: 6}, {title: "Whole", multiplier: 12}],
+            isPiece: false
+        }
     // [WORKFOOD]
     } else if (title == "🥟 [SPAR] - Hotdog Bakery" ){
         return {

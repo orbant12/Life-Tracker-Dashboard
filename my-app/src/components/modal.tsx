@@ -33,12 +33,20 @@ export default function BasicModal({foodData, handleLogAmmount}) {
   const [addedCarbs, setAddedCarbs] = React.useState(0)
   const [isPiece, setIsPiece] = React.useState<boolean | null>(false)
   const [isLoading, setIsLoading] = React.useState(false); // New loading state
+  const [activeAmount, setActiveAmount] = React.useState(0)
 
   const handleOpen = (item) => {
     setOpen(true)
     setNameTitle(item.food)
     setCal(item.calories)
-    setAmount(item.amount)
+    
+    if(item.amount == "100g"){
+      setActiveAmount(100)
+      setAmount(100)
+    }else{
+      setActiveAmount(item.amount)
+      setAmount(item.amount)
+    }
     setProtein(item.protein)
     setCarbs(item.carbs)
     setFats(item.fats)
@@ -62,7 +70,7 @@ export default function BasicModal({foodData, handleLogAmmount}) {
             protein: addedProtein,
             carbs: addedCarbs,
             fats: addedFats,
-            servingSize: amount,
+            servingSize: activeAmount,
             servingUnit: serving
           }),
         });
@@ -90,11 +98,18 @@ export default function BasicModal({foodData, handleLogAmmount}) {
 
   const [currBox, setCurrBox] = React.useState<Box[]>([{title:"2 Eggs",multiplier:2,isPiece:true},{title:"3 Eggs",multiplier:3,isPiece:true},{title:"4 Eggs",multiplier:4,isPiece:true}])
   const [activeCal, setActiveCal] = React.useState(0)
+
+
   const handleBoxes = (item) => {
     setAddedCal(0)
     setAddedCarbs(0)
     setAddedFats(0)
     setAddedProtein(0)
+    if(item.amount == "100g"){
+      setActiveAmount(100)
+    }else{
+      setActiveAmount(item.amount)
+    }
     //If item.food incule 🥗
     if(item.food.includes("🥗")) {
       const response: any = getSaladBox(item.food);
@@ -147,6 +162,7 @@ export default function BasicModal({foodData, handleLogAmmount}) {
         <Box sx={style}>
             <div className='flex border-2 border-gray-500 justify-center font-[700] w-[100%] p-5 rounded-t-lg bg-gray-200'>
                 {nameTitle} - {cal} cal / {amount}
+                <h3 className='absolute right-9'>Active: {activeAmount}</h3>
             </div>
           <Typography id="modal-modal-description" sx={{ mt: 2, alignItems:"center", justifyContent:"center" }}>
             <div className='flex flex-row w-full justify-evenly items-center m-5'>
@@ -171,6 +187,7 @@ export default function BasicModal({foodData, handleLogAmmount}) {
             <SelectAble 
                 boxes={currBox}
                 handlePress={(n) => {
+                    setActiveAmount(n * amount)
                     setActiveCal(n * cal);
                     setAddedCal(Math.round(n * cal));
                     setAddedCarbs(Math.round(n * carbs));
@@ -184,6 +201,7 @@ export default function BasicModal({foodData, handleLogAmmount}) {
               <SelectAbleSalad 
                 boxes={currBox}
                 handlePress={(n) => {
+                    setActiveAmount(1)
                     setActiveCal(n.calories);
                     setAddedCal(n.calories);
                     setAddedCarbs(n.carbs);
@@ -203,12 +221,15 @@ export default function BasicModal({foodData, handleLogAmmount}) {
                   handleAdd={handleAddNew}
                   setValue={(n) => {
                       if (isPiece) {
+                        
                           setActiveCal(n * cal);
+                          setActiveAmount(n * amount)
                           setAddedCal(Math.round(n * cal));
                           setAddedCarbs(Math.round(n * carbs));
                           setAddedFats(Math.round(n * fats));
                           setAddedProtein(Math.round(n * protein));
                       } else {
+                          setActiveAmount(n * (amount / 100))
                           setActiveCal(n* (cal / 100));
                           setAddedCal(Math.round(n* (cal / 100)));
                           setAddedCarbs(Math.round(n * (carbs / 100)));

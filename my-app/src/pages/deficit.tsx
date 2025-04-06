@@ -30,6 +30,7 @@ const DeficitStats: React.FC = () => {
   const [dailyDeficit, setDailyDeficit] = useState<number>(0);
   const [weeklyDeficit, setWeeklyDeficit] = useState<number>(0);
   const [activeIcon, setActiveIcon] = useState<IconType>('deficit');
+  const [foodList, setFoodList] = useState([])
   const [deficitData, setDeficitData] = useState<any[]>([
     {
       name: 'Deficit',
@@ -97,6 +98,7 @@ const DeficitStats: React.FC = () => {
             color: 'red'
           },
         ]);
+        setFoodList(data.result.foodList)
         setCalorieData([
           {
             name: 'Calories',
@@ -185,7 +187,7 @@ const DeficitStats: React.FC = () => {
         </div>
         
         <div className="mt-5 mb-5 w-[90%]">
-          <ActivitySummary data={[]} />
+          <ActivitySummary data={foodList} />
         </div>
       </div>
     </div>
@@ -255,25 +257,24 @@ const ActivitySummary = ({ data }) => {
           <div className="p-2 bg-blue-50 rounded-lg">
             <Activity className="h-5 w-5 text-blue-600" />
           </div>
-          <h2 className="text-lg font-semibold text-gray-800">Activity Summary</h2>
+          <h2 className="text-lg font-semibold text-gray-800">Intake Summary</h2>
         </div>
       </div>
       
       <div className="p-5 space-y-4">
         {data.map((item, index) => (
-            item.value !== "0 min" && item.name !== "Steps" &&
           <div key={index} className="flex items-center justify-between border-b border-gray-100 pb-3 last:border-0 last:pb-0">
             <div className="flex items-center space-x-3">
               <div className="p-2 rounded-lg" style={{ backgroundColor: item.bgColor }}>
                 {item.icon}
               </div>
               <div>
-                <p className="font-medium text-gray-800">{item.name}</p>
-                <p className="text-xs text-gray-500">{item.description}</p>
+                <p className="font-medium text-gray-800 text-left">{item.name}</p>
+                {item.servingSize != null && <p className="text-xs text-gray-500 mt-3 text-left"> <span className='font-bold'>{item.servingSize}{item.servingUnit}</span> • Protein: {item.protein}g • Fats: {item.fats}g • Carbs: {item.carbs}g </p>}
               </div>
             </div>
             <div className="flex items-center">
-              <p className="font-semibold">{item.value}</p>
+              <p className="font-semibold">{item.calories} cal</p>
               <ChevronRight className="h-4 w-4 text-gray-400 ml-2" />
             </div>
           </div>

@@ -231,6 +231,22 @@ export const getFoodData = (data) => {
             carbs: 19.4,
             protein: 2.8,
             fats: 4.2
+        },
+        {
+            amount: '100g',
+            food: '🍚 Black Rice [NOT COOKED]',
+            calories: 305,
+            carbs: 62,
+            protein: 9,
+            fats: 2
+        },
+        {
+            amount: '100g',
+            food: '🍚 Black Rice [COOKED]',
+            calories: 102,
+            carbs: 21,
+            protein: 3,
+            fats: 0.7
         }
     ]
 
