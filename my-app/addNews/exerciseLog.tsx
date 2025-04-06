@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Activity, Heart, Dumbbell, Bike, FootprintsIcon, Trophy, ArrowRight, Zap } from 'lucide-react';
+import PushDayTracker from '../src/components/gymLogger';
 
 const ExercisePanel = () => {
   const [activeTab, setActiveTab] = useState('steps');
@@ -244,6 +245,73 @@ const ExercisePanel = () => {
     { id: 'push', label: 'Push' },
     { id: 'fullbody', label: 'Full Body' }
   ];
+
+  const [pushDay, setPushDay] = useState([
+    {
+      name: 'Incline Dumbell Press',
+      sets: 3,
+      reps: 8,
+      weight: 28,
+    },
+    {
+      name: 'Shoulder Dumbell Press',
+      sets: 3,
+      reps: 8,
+      weight: 24,
+    },
+    {
+      name: 'Leaning Lateral Raise (Dropset)',
+      sets: 2,
+      reps: [4,8,6],
+      weight: 50,
+    },
+    {
+      name: 'Chest Fly',
+      sets: 3,
+      reps: 8,
+      weight: 72,
+    },
+    {
+      name: 'Reverse Fly',
+      sets: 3,
+      reps: 8,
+      weight: 54,
+    }
+  ])
+
+  const [pullDay, setPullDay] = useState([
+    {
+      name: 'Pull Ups',
+      sets: 3,
+      reps: 8,
+      weight: 74,
+    },
+    {
+      name: 'Pull Ups',
+      sets: 3,
+      reps: 8,
+      weight: 74,
+    },
+    {
+      name: 'Pull Ups',
+      sets: 3,
+      reps: 8,
+      weight: 74,
+    },
+    {
+      name: 'Pull Ups',
+      sets: 3,
+      reps: 8,
+      weight: 74,
+    },
+    {
+      name: 'Pull Ups',
+      sets: 3,
+      reps: 8,
+      weight: 74,
+    }
+  ])
+
   
   const renderTabContent = () => {
     switch (activeTab) {
@@ -368,6 +436,15 @@ const ExercisePanel = () => {
           </div>
         ))}
       </div>
+      {selectedType != '' && (
+        selectedType == 'pull' ? (
+            <PushDayTracker type={'pull'} />
+        ) : selectedType == 'push' ? (
+          <PushDayTracker type={'push'} />
+        ):(
+          <PushDayTracker type={'fullbody'} />
+        ))
+      }
     </div>
           </div>
         );
@@ -433,7 +510,7 @@ const ExercisePanel = () => {
   };
   
   return (
-    <div className="w-full bg-white p-6 rounded-xl shadow-lg">
+    <div className="w-full bg-white p-6 rounded-xl shadow-lg overflow-y-scroll h-[100%]">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">

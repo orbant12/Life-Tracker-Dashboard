@@ -17,7 +17,7 @@ const EnhancedPieChart = ({ data }) => {
           outerRadius={80}
           paddingAngle={5}
           dataKey="value"
-          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+          label={({ name, value }) => `${name}: ${value} kg`}
         >
           {data.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
@@ -53,7 +53,7 @@ const Widget = ({ title, chartData, total, icon }) => {
       <div className="p-5">
         <EnhancedPieChart data={chartData} />
         <div className="mt-3 text-center">
-          <p className="text-gray-500 text-sm">Total</p>
+          <p className="text-gray-500 text-sm">Current</p>
           <p className="text-2xl font-bold text-gray-800">{total}</p>
         </div>
       </div>
@@ -159,7 +159,7 @@ const WeightTrackerPanel = () => {
 
                setWeightData([
                 { name: 'Weight', value: data.result.weight, color: '#0088FE' },
-                { name: 'Goal', value: data.result.weight - 72, color: '#00C49F' },]
+                { name: 'Goal', value: (data.result.weight - 72).toFixed(1), color: '#00C49F' },]
               )
 
                 setActivitySummary([
@@ -220,7 +220,7 @@ const WeightTrackerPanel = () => {
                 <TrendingDown size={18} className="text-green-500" />
                 <span className="font-medium text-gray-700">Weekly Change</span>
             </div>
-            <span className="text-lg font-bold text-green-500">{dayBefore - weightData[0].value}</span>
+            <span className="text-lg font-bold text-green-500">{(weightData[0].value - dayBefore).toFixed(1)}</span>
             </div>
         </div>
         <div className="bg-white p-4 rounded-lg shadow-md">
@@ -240,7 +240,7 @@ const WeightTrackerPanel = () => {
             <Widget 
                 title="Weight" 
                 chartData={weightData} 
-                total={`${1} kg`}
+                total={`${weightData[0].value} kg`}
                 icon={<Activity className="h-5 w-5 text-blue-600" />}
             />
             

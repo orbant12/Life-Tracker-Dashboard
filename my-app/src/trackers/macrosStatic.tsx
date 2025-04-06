@@ -17,20 +17,21 @@ const EnhancedPieChart = ({ data }) => {
           outerRadius={80}
           paddingAngle={5}
           dataKey="value"
-          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+          label={({ name, value }) => `${name}: ${value} g`}
         >
           {data.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
           ))}
         </Pie>
         <Tooltip 
-          formatter={(value) => [`${value} calories`, 'Value']}
+          formatter={(value) => [`${value} g`, 'Value']}
           labelFormatter={(name) => `Category: ${name}`}
         />
       </PieChart>
     </ResponsiveContainer>
   );
 };
+
 
 // Stat Card Component
 const StatCard = ({ icon, title, value, unit,percent }) => {
@@ -52,7 +53,7 @@ const StatCard = ({ icon, title, value, unit,percent }) => {
 };
 
 // Main Widget Component
-const Widget = ({ title, chartData, total, icon }) => {
+const Widget = ({ title, chartData, total, icon,chartTitle }) => {
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 h-full w-[40%]">
       <div className="p-5 border-b border-gray-100">
@@ -70,13 +71,15 @@ const Widget = ({ title, chartData, total, icon }) => {
       <div className="p-5">
         <EnhancedPieChart data={chartData} />
         <div className="mt-3 text-center">
-          <p className="text-gray-500 text-sm">Total</p>
+          <p className="text-gray-500 text-sm">{chartTitle}</p>
           <p className="text-2xl font-bold text-gray-800">{total}</p>
         </div>
       </div>
     </div>
   );
 };
+
+
 
 // Activity Summary Card
 const ActivitySummary = ({ data }) => {
@@ -116,6 +119,7 @@ const ActivitySummary = ({ data }) => {
 
 // Main Exercise Tracker Panel
 const FoodTrackerPanel2 = () => {
+  const [currWeight, setCurrWeight] = useState(0);
    const [overall,setOverall] = useState<any[]>([
           {
             name: 'Protein',
@@ -157,6 +161,8 @@ const FoodTrackerPanel2 = () => {
                     color: 'orange'
                   },
                 ]);
+
+                setCurrWeight(data.result.weight);
                     
          
               } catch (err) {
@@ -208,6 +214,15 @@ const FoodTrackerPanel2 = () => {
                 chartData={overall} 
                 total={`${overall.reduce((acc, item) => acc + item.value, 0)} g`}
                 icon={<Activity className="h-5 w-5 text-blue-600" />}
+                chartTitle={'Total'}
+            />
+
+            <Widget
+                title="Protein Goal" 
+                chartData={[overall[0], {name: 'Goal', value: Math.round((currWeight * 1.6) - overall[0].value), color: 'green'}]}
+                total={`${Math.round(currWeight * 1.6)} g`}
+                icon={<Activity className="h-5 w-5 text-blue-600" />}
+                chartTitle={'Goal'}
             />
             
      
