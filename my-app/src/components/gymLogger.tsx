@@ -14,65 +14,9 @@ interface Exercise {
   sets: ExerciseSet[];
 }
 
-const PushDayTracker = ({type}) => {
+const PushDayTracker = ({type, pushDay, setPushDay, pullDay, setPullDay}) => {
   // Convert the initial state to use the new ExerciseSet structure
-  const [pushDay, setPushDay] = useState<Exercise[]>([
-    {
-      name: 'Incline Dumbell Press',
-      sets: Array(3).fill({ reps: 8, weight: 28 }),
-    },
-    {
-      name: 'Shoulder Dumbell Press',
-      sets: Array(3).fill({ reps: 8, weight: 24 }),
-    },
-    {
-      name: 'Leaning Lateral Raise (Dropset)',
-      sets: [
-        { reps: 4, weight: 50 },
-        { reps: 8, weight: 50 },
-        { reps: 6, weight: 50 },
-      ],
-    },
-    {
-      name: 'Chest Fly',
-      sets: Array(3).fill({ reps: 8, weight: 72 }),
-    },
-    {
-      name: 'Reverse Fly',
-      sets: Array(3).fill({ reps: 8, weight: 54 }),
-    }
-  ]);
 
-  const [pullDay, setPullDay] = useState<Exercise[]>([
-    {
-      name: 'Pull Ups',
-      sets: Array(3).fill({ reps: 8, weight: 28 }),
-    },
-    {
-      name: 'Horizontal Back Pull',
-      sets: Array(3).fill({ reps: 8, weight: 24 }),
-    },
-    {
-      name: 'Wide Grip Back Pull',
-      sets: [
-        { reps: 4, weight: 50 },
-        { reps: 8, weight: 50 },
-        { reps: 6, weight: 50 },
-      ],
-    },
-    {
-      name: 'Lat Pull Downs',
-      sets: Array(3).fill({ reps: 8, weight: 72 }),
-    },
-    {
-      name: 'One Handed Row',
-      sets: Array(3).fill({ reps: 8, weight: 54 }),
-    },
-    {
-        name: 'Biceps',
-        sets: Array(3).fill({ reps: 8, weight: 54 }),
-    }
-  ]);
 
   // State for editing
   const [editIndex, setEditIndex] = useState<number | null>(null);

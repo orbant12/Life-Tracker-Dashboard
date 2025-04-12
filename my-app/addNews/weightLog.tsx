@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 
 
 
-export const WeightPanel = () => {
+export const WeightPanel = ({selectedDate}) => {
     const [weight, setWeight] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [isLoading, setIsLoading] = useState(false); // New state for loading
@@ -34,7 +34,8 @@ export const WeightPanel = () => {
             bloated: isBloated,
             poop: isPoop,
             watery: isWatery,
-            isBadSleep: isBadSleep
+            isBadSleep: isBadSleep,
+            date: selectedDate
           }),
         })
         .then(response => response.json())

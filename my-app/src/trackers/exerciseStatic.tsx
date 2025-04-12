@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { Activity, ChevronRight, TrendingUp, Clock, MapPin, Dumbbell, Bike } from 'lucide-react';
+import { Activity, ChevronRight, TrendingUp, Clock, MapPin, Dumbbell, Bike, ChevronDown, X, Clipboard, BarChart2 } from 'lucide-react';
 
 // Enhanced Pie Chart Component
 const EnhancedPieChart = ({ data }) => {
@@ -75,7 +75,7 @@ const Widget = ({ title, chartData, total, icon }) => {
 };
 
 // Activity Summary Card
-const ActivitySummary = ({ data }) => {
+const ActivitySummary = ({ data, workoutData }) => {
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100">
       <div className="p-5 border-b border-gray-100">
@@ -103,7 +103,7 @@ const ActivitySummary = ({ data }) => {
             </div>
             <div className="flex items-center">
               <p className="font-semibold">{item.value}</p>
-              <ChevronRight className="h-4 w-4 text-gray-400 ml-2" />
+              {item.name == "Gym Workout" ? <WorkoutDataModal workoutData={workoutData} /> : <ChevronRight className="h-4 w-4 text-gray-400 ml-2" />}
             </div>
           </div>
         ))
@@ -148,6 +148,58 @@ const ExerciseTrackerPanel2 = () => {
          ]);
  
         const [movementCalSum, setMovementCalSum] = useState(0)
+
+        // Sample workout data
+        const [sampleWorkoutData, setSampleWorkoutData] = useState([
+          {
+            "name": "Pull Ups",
+            "sets": [
+              {"reps": 8, "weight": 28},
+              {"reps": 8, "weight": 28},
+              {"reps": 8, "weight": 28}
+            ]
+          },
+          {
+            "name": "Horizontal Back Pull",
+            "sets": [
+              {"reps": 8, "weight": 24},
+              {"reps": 8, "weight": 24},
+              {"reps": 8, "weight": 24}
+            ]
+          },
+          {
+            "name": "Wide Grip Back Pull",
+            "sets": [
+              {"reps": 4, "weight": 50},
+              {"reps": 8, "weight": 50},
+              {"reps": 6, "weight": 50}
+            ]
+          },
+          {
+            "name": "Lat Pull Downs",
+            "sets": [
+              {"reps": 8, "weight": 72},
+              {"reps": 8, "weight": 72},
+              {"reps": 8, "weight": 72}
+            ]
+          },
+          {
+            "name": "One Handed Row",
+            "sets": [
+              {"reps": 8, "weight": 54},
+              {"reps": 8, "weight": 54},
+              {"reps": 8, "weight": 54}
+            ]
+          },
+          {
+            "name": "Biceps",
+            "sets": [
+              {"reps": 8, "weight": 54},
+              {"reps": 8, "weight": 54},
+              {"reps": 8, "weight": 54}
+            ]
+          }
+        ]);
  
         const [activitySummary, setActivitySummary] = useState([
             {
@@ -270,6 +322,8 @@ const ExerciseTrackerPanel2 = () => {
                         bgColor: '#10B981'
                     }
                ]);
+
+               setSampleWorkoutData(JSON.parse(data.result.workoutData))
         
              } catch (err) {
                console.error('Error fetching daily deficit:', err);
@@ -332,7 +386,7 @@ const ExerciseTrackerPanel2 = () => {
         </div>
         
         <div className="mt-5 mb-5 w-[90%]">
-          <ActivitySummary data={activitySummary} />
+          <ActivitySummary data={activitySummary} workoutData={sampleWorkoutData} />
         </div>
       </div>
     </div>
@@ -340,3 +394,169 @@ const ExerciseTrackerPanel2 = () => {
 };
 
 export default ExerciseTrackerPanel2;
+
+
+export const WorkoutDataModal = ({ workoutData }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [expandedExercises, setExpandedExercises] = useState({});
+
+  const toggleModal = () => setIsOpen(!isOpen);
+  
+  const toggleExercise = (index) => {
+    setExpandedExercises({
+      ...expandedExercises,
+      [index]: !expandedExercises[index]
+    });
+  };
+  
+  // Calculate totals for the summary
+  const calculateSummary = () => {
+    let totalExercises = workoutData.length;
+    let totalSets = 0;
+    let totalReps = 0;
+    let totalWeight = 0;
+    let maxWeight = 0;
+    
+    workoutData.forEach(exercise => {
+      const sets = exercise.sets.length;
+      totalSets += sets;
+      
+      exercise.sets.forEach(set => {
+        totalReps += set.reps;
+        totalWeight += set.weight * set.reps; // Volume for this set
+        maxWeight = Math.max(maxWeight, set.weight);
+      });
+    });
+    
+    return {
+      exercises: totalExercises,
+      sets: totalSets,
+      reps: totalReps,
+      volume: totalWeight, // Total weight lifted
+      maxWeight
+    };
+  };
+  
+  const summary = calculateSummary();
+
+  return (
+    <div className="font-sans">
+      {!isOpen ? (
+        <div 
+          onClick={toggleModal} 
+          className="flex items-center justify-center p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors ml-4"
+          aria-label="View workout details"
+        >
+          <BarChart2 size={20} />
+        </div>
+      ) : (
+        <div className="fixed inset-0 bg-gray-100 bg-opacity-15 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800">Workout Summary</h2>
+              <div 
+                onClick={toggleModal} 
+                className="p-1 rounded-full hover:bg-gray-100 transition-colors"
+                aria-label="Close modal"
+              >
+                <X size={24} className="text-gray-500" />
+              </div>
+            </div>
+            
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="bg-white p-3 rounded shadow-sm text-center">
+                  <p className="text-sm text-gray-500">Exercises</p>
+                  <p className="text-xl font-bold text-gray-800">{summary.exercises}</p>
+                </div>
+                <div className="bg-white p-3 rounded shadow-sm text-center">
+                  <p className="text-sm text-gray-500">Sets</p>
+                  <p className="text-xl font-bold text-gray-800">{summary.sets}</p>
+                </div>
+                <div className="bg-white p-3 rounded shadow-sm text-center">
+                  <p className="text-sm text-gray-500">Reps</p>
+                  <p className="text-xl font-bold text-gray-800">{summary.reps}</p>
+                </div>
+                <div className="bg-white p-3 rounded shadow-sm text-center">
+                  <p className="text-sm text-gray-500">Volume</p>
+                  <p className="text-xl font-bold text-gray-800">{summary.volume}kg</p>
+                </div>
+                <div className="bg-white p-3 rounded shadow-sm text-center">
+                  <p className="text-sm text-gray-500">Max Weight</p>
+                  <p className="text-xl font-bold text-gray-800">{summary.maxWeight}kg</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="overflow-y-auto flex-grow">
+              <div className="p-4">
+                <h3 className="text-lg font-medium text-gray-700 mb-3">Exercise Details</h3>
+                <div className="space-y-3">
+                  {workoutData.map((exercise, index) => (
+                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div 
+                        className="flex items-center justify-between p-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                        onClick={() => toggleExercise(index)}
+                      >
+                        <div className="flex items-center">
+                          {expandedExercises[index] ? (
+                            <ChevronDown size={18} className="text-gray-500 mr-2" />
+                          ) : (
+                            <ChevronRight size={18} className="text-gray-500 mr-2" />
+                          )}
+                          <h4 className="font-medium text-gray-800">{exercise.name}</h4>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {exercise.sets.length} sets
+                        </div>
+                      </div>
+                      
+                      {expandedExercises[index] && (
+                        <div className="p-3 border-t border-gray-200">
+                          <table className="min-w-full">
+                            <thead>
+                              <tr>
+                                <th className="text-left text-sm font-medium text-gray-500 pl-2">Set</th>
+                                <th className="text-left text-sm font-medium text-gray-500">Reps</th>
+                                <th className="text-left text-sm font-medium text-gray-500">Weight</th>
+                                <th className="text-left text-sm font-medium text-gray-500">Volume</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {exercise.sets.map((set, setIndex) => (
+                                <tr key={setIndex} className="border-b border-gray-100 last:border-0">
+                                  <td className="py-2 pl-2 text-gray-800">{setIndex + 1}</td>
+                                  <td className="py-2 text-gray-800">{set.reps}</td>
+                                  <td className="py-2 text-gray-800">{set.weight}kg</td>
+                                  <td className="py-2 text-gray-800">{set.reps * set.weight}kg</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            <div className="border-t border-gray-200 p-4 flex justify-end">
+              <div 
+                onClick={toggleModal} 
+                className="px-4 py-2 bg-gray-100 text-gray-800 rounded hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+
+
+

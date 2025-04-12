@@ -2,7 +2,17 @@ import React, { useState } from 'react';
 import { Activity, Heart, Dumbbell, Bike, FootprintsIcon, Trophy, ArrowRight, Zap } from 'lucide-react';
 import PushDayTracker from '../src/components/gymLogger';
 
-const ExercisePanel = () => {
+interface ExerciseSet {
+  reps: number;
+  weight: number;
+}
+
+interface Exercise {
+  name: string;
+  sets: ExerciseSet[];
+}
+
+const ExercisePanel = ({selectedDate}) => {
   const [activeTab, setActiveTab] = useState('steps');
   const [isLoading, setIsLoading] = useState(false); // New loading state
 
@@ -73,7 +83,8 @@ const ExercisePanel = () => {
         },
         body: JSON.stringify({
           steps: parseInt(formData.steps),
-          burn:burn
+          burn:burn,
+          date: selectedDate
         }),
       });
       
@@ -108,23 +119,48 @@ const ExercisePanel = () => {
           duration: parseInt(formData.zone2Minutes),
           distance: parseFloat(formData.zone2HeartRate),
           burn: burn,
+          date: selectedDate
         };
       } 
       else if (activeTab === 'vo2max' && formData.vo2MaxScore) {
         requestBody = {
           exerciseType: 'vo2max',
           duration: 0, // You might want to add a duration field to your VO2Max form
-          vo2max: parseFloat(formData.vo2MaxScore)
+          vo2max: parseFloat(formData.vo2MaxScore),
+          date: selectedDate
         };
       }
       else if (activeTab === 'gym' && formData.gymMinutes && selectedType) {
         const burn = await calculateCalorieBurn(activeTab,formData.gymMinutes,0)
-        requestBody = {
-          exerciseType: 'gym',
-          duration: parseInt(formData.gymMinutes),
-          workoutType: selectedType,
-          burn:burn,
-        };
+        if(selectedType == "pull"){
+          requestBody = {
+            exerciseType: 'gym',
+            duration: parseInt(formData.gymMinutes),
+            workoutType: selectedType,
+            burn:burn,
+            workoutData: pullDay,
+            date: selectedDate
+          };
+        } else if (selectedType == "push"){
+          requestBody = {
+            exerciseType: 'gym',
+            duration: parseInt(formData.gymMinutes),
+            workoutType: selectedType,
+            burn:burn,
+            workoutData: pushDay,
+            date: selectedDate
+          };
+        } else {
+          requestBody = {
+            exerciseType: 'gym',
+            duration: parseInt(formData.gymMinutes),
+            workoutType: selectedType,
+            burn:burn,
+            workoutData: pullDay,
+            date: selectedDate
+          };
+        }
+
       }
       else {
         // If required fields aren't filled, exit early
@@ -180,7 +216,8 @@ const ExercisePanel = () => {
         body: JSON.stringify({
           duration: parseInt(formData.bikeMinutes),
           distance: parseFloat(formData.bikeDistance),
-          burn: burn
+          burn: burn,
+          date: selectedDate
         }),
       });
       
@@ -246,71 +283,63 @@ const ExercisePanel = () => {
     { id: 'fullbody', label: 'Full Body' }
   ];
 
-  const [pushDay, setPushDay] = useState([
+  const [pushDay, setPushDay] = useState<Exercise[]>([
     {
       name: 'Incline Dumbell Press',
-      sets: 3,
-      reps: 8,
-      weight: 28,
+      sets: Array(3).fill({ reps: 8, weight: 28 }),
     },
     {
       name: 'Shoulder Dumbell Press',
-      sets: 3,
-      reps: 8,
-      weight: 24,
+      sets: Array(3).fill({ reps: 8, weight: 24 }),
     },
     {
       name: 'Leaning Lateral Raise (Dropset)',
-      sets: 2,
-      reps: [4,8,6],
-      weight: 50,
+      sets: [
+        { reps: 4, weight: 50 },
+        { reps: 8, weight: 50 },
+        { reps: 6, weight: 50 },
+      ],
     },
     {
       name: 'Chest Fly',
-      sets: 3,
-      reps: 8,
-      weight: 72,
+      sets: Array(3).fill({ reps: 8, weight: 72 }),
     },
     {
       name: 'Reverse Fly',
-      sets: 3,
-      reps: 8,
-      weight: 54,
+      sets: Array(3).fill({ reps: 8, weight: 54 }),
     }
-  ])
+  ]);
 
-  const [pullDay, setPullDay] = useState([
+  const [pullDay, setPullDay] = useState<Exercise[]>([
     {
       name: 'Pull Ups',
-      sets: 3,
-      reps: 8,
-      weight: 74,
+      sets: Array(3).fill({ reps: 8, weight: 28 }),
     },
     {
-      name: 'Pull Ups',
-      sets: 3,
-      reps: 8,
-      weight: 74,
+      name: 'Horizontal Back Pull',
+      sets: Array(3).fill({ reps: 8, weight: 24 }),
     },
     {
-      name: 'Pull Ups',
-      sets: 3,
-      reps: 8,
-      weight: 74,
+      name: 'Wide Grip Back Pull',
+      sets: [
+        { reps: 4, weight: 50 },
+        { reps: 8, weight: 50 },
+        { reps: 6, weight: 50 },
+      ],
     },
     {
-      name: 'Pull Ups',
-      sets: 3,
-      reps: 8,
-      weight: 74,
+      name: 'Lat Pull Downs',
+      sets: Array(3).fill({ reps: 8, weight: 72 }),
     },
     {
-      name: 'Pull Ups',
-      sets: 3,
-      reps: 8,
-      weight: 74,
+      name: 'One Handed Row',
+      sets: Array(3).fill({ reps: 8, weight: 54 }),
+    },
+    {
+        name: 'Biceps',
+        sets: Array(3).fill({ reps: 8, weight: 54 }),
     }
-  ])
+  ]);
 
   
   const renderTabContent = () => {
@@ -438,11 +467,11 @@ const ExercisePanel = () => {
       </div>
       {selectedType != '' && (
         selectedType == 'pull' ? (
-            <PushDayTracker type={'pull'} />
+            <PushDayTracker pushDay={pushDay} setPushDay={setPushDay} pullDay={pullDay} setPullDay={setPullDay} type={'pull'} />
         ) : selectedType == 'push' ? (
-          <PushDayTracker type={'push'} />
+          <PushDayTracker pushDay={pushDay} setPushDay={setPushDay} pullDay={pullDay} setPullDay={setPullDay} type={'push'} />
         ):(
-          <PushDayTracker type={'fullbody'} />
+          <PushDayTracker pushDay={pushDay} setPushDay={setPushDay} pullDay={pullDay} setPullDay={setPullDay} type={'fullbody'} />
         ))
       }
     </div>
@@ -575,6 +604,38 @@ const ExercisePanel = () => {
               ) : (
                 <>
                   <span>Save Activity</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
+            </div>
+
+            <div
+              onClick={() => alert(selectedType)}
+              className={`flex w-full items-center justify-center space-x-2 py-3 px-6 rounded-lg font-semibold text-white ${
+                isCurrentTabEmpty() || isLoading
+                  ? 'bg-gray-300 cursor-not-allowed'
+                  : activeTab === 'steps' 
+                    ? 'bg-blue-600 hover:opacity-90'
+                    : activeTab === 'zone2' 
+                    ? 'bg-green-600 hover:opacity-90'
+                    : activeTab === 'vo2max' 
+                    ? 'bg-purple-600 hover:opacity-90'
+                    : activeTab === 'gym' 
+                    ? 'bg-red-600 hover:opacity-90'
+                    : 'bg-amber-600 hover:opacity-90'
+              }`}
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <span>Test Activity</span>
                   <ArrowRight size={16} />
                 </>
               )}

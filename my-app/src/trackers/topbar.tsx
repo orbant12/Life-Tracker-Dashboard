@@ -4,7 +4,7 @@ import PermMediaIcon from '@mui/icons-material/PermMedia';
 import AddReactionIcon from '@mui/icons-material/AddReaction';
 import HotelIcon from '@mui/icons-material/Hotel';
 import ExerciseTrackerPanel from '../trackers/exercise';
-import MacrosTrackerPanel from '../trackers/macros';
+import MacrosTrackerPanel from './macrosWeekly';
 import NoFoodIcon from '@mui/icons-material/NoFood';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 
@@ -80,7 +80,7 @@ export const BottomContainer = ({activeIcon, setActiveIcon}) => {
   );
 };
 
-type ViewOption = 'today' | 'weekly' | 'both';
+type ViewOption = 'today' | 'weekly' | 'monthly';
 
 interface ViewToggleProps {
   viewOption: ViewOption;
@@ -92,7 +92,7 @@ export const ViewToggle: React.FC<ViewToggleProps> = ({ viewOption, onChange }) 
   const options: { value: ViewOption; label: string }[] = [
     { value: 'today', label: 'Today' },
     { value: 'weekly', label: 'Weekly' },
-    { value: 'both', label: 'Both' }
+    { value: 'monthly', label: 'Monthly' }
   ];
 
   // Handle option change

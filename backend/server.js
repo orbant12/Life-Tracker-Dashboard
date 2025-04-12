@@ -216,23 +216,7 @@ function getDayBeforeWeight(data, typeString) {
 /**
  * Calculate the weekly deficit for the given "weekName" (e.g. "[MARCH] 3-9").
  */
-function getWeeklyStats(data, weekName) {
-  let totalDeficit = 0;
-  data.results.forEach((page) => {
-    const weekProp = page.properties['Week'];
-    if (weekProp && Array.isArray(weekProp.multi_select)) {
-      weekProp.multi_select.forEach((option) => {
-        if (option.name === weekName) {
-          const deficitProperty = page.properties['Deficit'];
-          if (deficitProperty && typeof deficitProperty.number === 'number') {
-            totalDeficit += deficitProperty.number;
-          }
-        }
-      });
-    }
-  });
-  return totalDeficit;
-}
+
 
 /**
  * GET /api/weeks
@@ -543,7 +527,7 @@ async function ensureFoodDatabaseExists() {
 
 app.post('/api/foods', async (req, res) => {
   try {
-    const { name, protein, carbs, fats, calories, servingSize, servingUnit } = req.body;
+    const { name, protein, carbs, fats, calories, servingSize, servingUnit, date } = req.body;
     
     // Validate input
     if (!name || protein === undefined || carbs === undefined || 
@@ -563,11 +547,19 @@ app.post('/api/foods', async (req, res) => {
     }
     
     // Format today's date in YYYY / MM / DD format
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error('Invalid date format. Expected YYYY-MM-DD');
+    }
+    
+    // Split the input by hyphen
+    const [year, month, day] = date.split('-');
+    
+    // Return the formatted date
+    
     const todayFormatted = `${year} / ${month} / ${day}`;
+
+    const [year2, month2, day2] = date.split('-').map(Number);
+    const today = new Date(year2, month2 - 1, day2);
     
     // First create the food item
     const newFood = await notion.pages.create({
@@ -575,6 +567,7 @@ app.post('/api/foods', async (req, res) => {
       properties: {
         'Name': {
           title: [{ text: { content: name } }]
+          
         },
         'Protein': { number: Number(protein) },
         'Carbs': { number: Number(carbs) },
@@ -948,7 +941,7 @@ app.get('/api/summary', async (req, res) => {
 
 app.post('/api/weight', async (req, res) => {
   try {
-    const { weight, bloated, poop, watery, isBadSleep } = req.body;
+    const { weight, bloated, poop, watery, isBadSleep,date } = req.body;
     
     // Validate input
     if (weight === undefined) {
@@ -956,11 +949,19 @@ app.post('/api/weight', async (req, res) => {
     }
 
     // Format today's date in "YYYY / MM / DD" format to match your database
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error('Invalid date format. Expected YYYY-MM-DD');
+    }
+    
+    // Split the input by hyphen
+    const [year, month, day] = date.split('-');
+    
+    // Return the formatted date
+    
     const todayFormatted = `${year} / ${month} / ${day}`;
+
+    const [year2, month2, day2] = date.split('-').map(Number);
+    const today = new Date(year2, month2 - 1, day2);
     
     // Check if today's entry already exists
     const response = await notion.databases.query({
@@ -1125,7 +1126,7 @@ app.get('/api/weight', async (req, res) => {
 
 app.post('/api/steps', async (req, res) => {
   try {
-    const { steps, burn } = req.body;
+    const { steps, burn, date } = req.body;
     
     // Validate input
     if (steps === undefined) {
@@ -1136,7 +1137,17 @@ app.post('/api/steps', async (req, res) => {
     const burnValue = burn !== undefined ? Number(burn) : 0;
 
     // Format today's date in "YYYY / MM / DD" format to match your database
-    const todayFormatted = getTodayFormatted();
+    // Format today's date in YYYY / MM / DD format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error('Invalid date format. Expected YYYY-MM-DD');
+    }
+    
+    // Split the input by hyphen
+    const [year, month, day] = date.split('-');
+    
+    // Return the formatted date
+    
+    const todayFormatted = `${year} / ${month} / ${day}`;
     
     // Check if today's entry already exists
     const response = await notion.databases.query({
@@ -1291,7 +1302,9 @@ app.post('/api/exercise', async (req, res) => {
       distance,     // for zone2 (km)
       vo2max,       // for vo2max (ml/kg/min)
       workoutType,  // for gym ('pull', 'push', 'fullbody')
-      burn          // calories burned (optional)
+      burn,         // calories burned (optional)
+      workoutData,   // detailed workout data (optional)
+      date
     } = req.body;
     
     // Validate input
@@ -1305,7 +1318,16 @@ app.post('/api/exercise', async (req, res) => {
     const burnValue = burn !== undefined ? Number(burn) : 0;
 
     // Format today's date in "YYYY / MM / DD" format
-    const todayFormatted = getTodayFormatted();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error('Invalid date format. Expected YYYY-MM-DD');
+    }
+    
+    // Split the input by hyphen
+    const [year, month, day] = date.split('-');
+    
+    // Return the formatted date
+    
+    const todayFormatted = `${year} / ${month} / ${day}`;
     
     // Check if today's entry already exists
     const response = await notion.databases.query({
@@ -1421,6 +1443,25 @@ app.post('/api/exercise', async (req, res) => {
         updatedValues.deficit = updatedDeficit;
       }
       
+      // Add workout data as text if provided
+      if (workoutData) {
+        // Convert to string if it's an object
+        const workoutDataStr = typeof workoutData === 'object' ? 
+                               JSON.stringify(workoutData) : 
+                               workoutData.toString();
+        
+        exerciseProperties['WorkoutData'] = {
+          rich_text: [{
+            text: {
+              content: workoutDataStr
+            }
+          }]
+        };
+        
+        // Save for response
+        updatedValues.workoutData = workoutDataStr;
+      }
+      
       // Update the database
       await notion.pages.update({
         page_id: pageId,
@@ -1438,7 +1479,8 @@ app.post('/api/exercise', async (req, res) => {
           distance: distance !== undefined ? Number(distance) : null,
           vo2max: vo2max !== undefined ? Number(vo2max) : null,
           workoutType: workoutType || null,
-          burn: burnValue
+          burn: burnValue,
+          workoutData: workoutData || null
         },
         updatedValues: updatedValues
       });
@@ -1479,6 +1521,22 @@ app.post('/api/exercise', async (req, res) => {
             select: { name: workoutType.charAt(0).toUpperCase() + workoutType.slice(1) } 
           };
         }
+      }
+      
+      // Add workout data as text if provided
+      if (workoutData) {
+        // Convert to string if it's an object
+        const workoutDataStr = typeof workoutData === 'object' ? 
+                               JSON.stringify(workoutData) : 
+                               workoutData.toString();
+        
+        exerciseProperties['WorkoutData'] = {
+          rich_text: [{
+            text: {
+              content: workoutDataStr
+            }
+          }]
+        };
       }
       
       // Calculate deficit including burn
@@ -1524,7 +1582,8 @@ app.post('/api/exercise', async (req, res) => {
           vo2max: vo2max !== undefined ? Number(vo2max) : null,
           workoutType: workoutType || null,
           burn: burnValue,
-          deficit: deficitValue
+          deficit: deficitValue,
+          workoutData: workoutData || null
         }
       });
     }
@@ -1540,7 +1599,7 @@ app.post('/api/exercise', async (req, res) => {
  */
 app.post('/api/bike', async (req, res) => {
   try {
-    const { duration, distance, burn } = req.body;
+    const { duration, distance, burn, date } = req.body;
     
     // Validate input
     if (duration === undefined || distance === undefined || burn === undefined) {
@@ -1550,7 +1609,16 @@ app.post('/api/bike', async (req, res) => {
     }
 
     // Format today's date in "YYYY / MM / DD" format
-    const todayFormatted = getTodayFormatted();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error('Invalid date format. Expected YYYY-MM-DD');
+    }
+    
+    // Split the input by hyphen
+    const [year, month, day] = date.split('-');
+    
+    // Return the formatted date
+    
+    const todayFormatted = `${year} / ${month} / ${day}`;
     
     // Check if today's entry already exists
     const response = await notion.databases.query({
@@ -1707,7 +1775,8 @@ app.post('/api/sleep', async (req, res) => {
       sleepQuality,     // for duration (poor, fair, good, excellent)
       bedTime,          // for timing (HH:MM)
       wakeTime,         // for timing (HH:MM)
-      sleepWindow       // for timing (calculated, e.g. "8h 30m")
+      sleepWindow,       // for timing (calculated, e.g. "8h 30m")
+      date
     } = req.body;
     
     // Validate input
@@ -1724,7 +1793,17 @@ app.post('/api/sleep', async (req, res) => {
     }
 
     // Format today's date in "YYYY / MM / DD" format
-    const todayFormatted = getTodayFormatted();
+     // Format today's date in "YYYY / MM / DD" format to match your database
+     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error('Invalid date format. Expected YYYY-MM-DD');
+    }
+    
+    // Split the input by hyphen
+    const [year, month, day] = date.split('-');
+    
+    // Return the formatted date
+    
+    const todayFormatted = `${year} / ${month} / ${day}`;
     
     // Check if today's entry already exists
     const response = await notion.databases.query({
@@ -1941,6 +2020,45 @@ const getDailyFoods = (data) => {
   return todaysFoods;
 };
 
+const getDailyFoodsForWeek = (data, day) => {
+  
+  let todaysFoods = [];
+  let totalCal = 0;
+  
+  data.results.forEach((page) => {
+    const dateAddedProp = page.properties['Date Added'];
+    
+    // Check if the date matches today's date
+    if ( dateAddedProp.rich_text[0].plain_text === day) {
+      
+      // Extract food information
+      const food = {
+        name: page.properties['Name'].title[0]?.plain_text || '',
+        protein: page.properties['Protein'].number || 0,
+        carbs: page.properties['Carbs'].number || 0,
+        fats: page.properties['Fats'].number || 0,
+        calories: page.properties['Calories'].number || 0,
+        servingSize: page.properties['Serving Size'].number || 0,
+        servingUnit: page.properties['Serving Unit'].rich_text[0].plain_text || 'g'
+      };
+      
+      totalCal += page.properties['Calories'].number || 0,
+      todaysFoods.push(food);
+    }
+  });
+  const cal = {
+    name: "Total Calories",
+    protein:null,
+    carbs:null,
+    fats:null,
+    calories:totalCal,
+    servingSize:null,
+    servingUnit: null,
+  }
+  todaysFoods.push(cal)
+  return todaysFoods;
+};
+
 const foodDatabaseId = process.env.NOTION_FOOD_DATABASE_ID;
 
 app.get('/api/tracker', async(req,res) => {
@@ -1970,6 +2088,7 @@ app.get('/api/tracker', async(req,res) => {
     const dailyCycleDur= await getDailyStats(response, 'Cycling Duration');
     const dailyWType= await getDailyStats(response, 'Workout Type');
     const dailyWDur= await getDailyStats(response, 'Gym Duration');
+    const dailyGymData = await getDailyStatsString(response, 'WorkoutData');
 
     const dailyWeight= await getDailyStats(response, 'Weight');
     const weightDayBefore = await getDayBeforeWeight(response, 'Weight');
@@ -2006,12 +2125,13 @@ app.get('/api/tracker', async(req,res) => {
       isBloated: dailyIsBloated,
       isWatery: dailyIsWatery,
       isBadSleep: dailyIsBadSleep,
-      bedTime: dailyBedTime[0].text.content,
-      wakeTime: dailyWakeTime[0].text.content,
-      sleepQuality: dailySleepQuality.name,
-      sleepHours: dailySleepHours[0].text.content,
-      foodList: dailyFoods
-
+      // Add null checks for sleep-related data
+      bedTime: dailyBedTime && dailyBedTime[0] && dailyBedTime[0].text ? dailyBedTime[0].text.content : null,
+      wakeTime: dailyWakeTime && dailyWakeTime[0] && dailyWakeTime[0].text ? dailyWakeTime[0].text.content : null,
+      sleepQuality: dailySleepQuality ? dailySleepQuality.name : null,
+      sleepHours: dailySleepHours && dailySleepHours[0] && dailySleepHours[0].text ? dailySleepHours[0].text.content : null,
+      foodList: dailyFoods,
+      workoutData: dailyGymData && dailyGymData[0] && dailyGymData[0].text ? dailyGymData[0].text.content : null,
     }
     
     res.json({result});
@@ -2020,6 +2140,1291 @@ app.get('/api/tracker', async(req,res) => {
     res.status(500).json({ error: 'Error fetching deficits' });
   }
 })
+
+function getWeeklyStatsString(data, typeString) {
+  // Get current date
+  const today = new Date();
+  
+  // Find the Monday of the current week
+  const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
+  const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Adjust for week starting on Monday
+  
+  const mondayDate = new Date(today);
+  mondayDate.setDate(today.getDate() - daysFromMonday);
+  
+  // Create an array of dates for the current week (Monday to Sunday)
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(mondayDate);
+    date.setDate(mondayDate.getDate() + i);
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    weekDates.push(`${year} / ${month} / ${day}`);
+  }
+  
+  // Initialize results array with one object per day of the week
+  const weeklyResults = weekDates.map(dateString => {
+    return {
+      day: dateString,
+      value: false // Default to false to match original function's behavior
+    };
+  });
+  
+  // Fill in values from the data
+  data.results.forEach((page) => {
+    const dayProp = page.properties['Day'];
+    if (dayProp && Array.isArray(dayProp.title)) {
+      dayProp.title.forEach((titleObj) => {
+        // Check if the date is in our week array
+        const dayIndex = weekDates.indexOf(titleObj.plain_text);
+        if (dayIndex !== -1) {
+          const textProperty = page.properties[typeString];
+          if (textProperty) {
+            weeklyResults[dayIndex].value = textProperty.rich_text;
+          }
+        }
+      });
+    }
+  });
+  
+  return weeklyResults;
+}
+
+function getWeeklyStats(data, typeString) {
+  // Get current date
+  const today = new Date();
+  
+  // Find the Monday of the current week
+  const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
+  const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Adjust for week starting on Monday
+  
+  const mondayDate = new Date(today);
+  mondayDate.setDate(today.getDate() - daysFromMonday);
+  
+  // Create an array of dates for the current week (Monday to Sunday)
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(mondayDate);
+    date.setDate(mondayDate.getDate() + i);
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    weekDates.push(`${year} / ${month} / ${day}`);
+  }
+  
+  // Initialize results array with one object per day of the week
+  const weeklyResults = weekDates.map(dateString => {
+    return {
+      day: dateString,
+      value: 0
+    };
+  });
+  
+  
+
+  // Fill in values from the data
+  data.results.forEach((page) => {
+    const dayProp = page.properties['Day'];
+    if (dayProp && Array.isArray(dayProp.title)) {
+      dayProp.title.forEach((titleObj) => {
+        // Check if the date is in our week array
+        const dayIndex = weekDates.indexOf(titleObj.plain_text);
+        if (dayIndex !== -1) {
+          const valueProperty = page.properties[typeString];
+          if (valueProperty && typeof valueProperty.number === 'number') {
+            weeklyResults[dayIndex].value += valueProperty.number;
+          }
+        }
+      });
+    }
+  });
+  
+  return weeklyResults;
+}
+
+// Example usage:
+// const weeklyCalories = getWeeklyStats(data, 'Calories');
+// const weeklyDeficit = getWeeklyStats(data, 'Deficit');
+
+app.get('/api/tracker/weekly', async(req,res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    const foodResponse = await notion.databases.query({
+      database_id: foodDatabaseId, 
+      page_size: 100,
+    });
+
+    // Get weekly stats for all metrics
+    const weeklyCal = await getWeeklyStats(response, 'Calories');
+    const weeklyDef = await getWeeklyStats(response, 'Deficit');
+    const weeklyProt = await getWeeklyStats(response, 'Protein');
+    const weeklyCarb = await getWeeklyStats(response, 'Carbs');
+    const weeklyFat = await getWeeklyStats(response, 'Fats');
+
+    const weeklyStep = await getWeeklyStats(response, 'Steps');
+    const weeklyKcalFromMov = await getWeeklyStats(response, 'Kcal From Movement');
+  
+    const weeklyZone2Dur = await getWeeklyStats(response, 'Zone2 Duration');
+    const weeklyZone2Dist = await getWeeklyStats(response, 'Zone2 Distance');
+    const weeklyCycleDist = await getWeeklyStats(response, 'Cycling Distance');
+    const weeklyCycleDur = await getWeeklyStats(response, 'Cycling Duration');
+    const weeklyWType = await getWeeklyStatsString(response, 'Workout Type');
+    const weeklyWDur = await getWeeklyStats(response, 'Gym Duration');
+
+    const weeklyWeight = await getWeeklyStats(response, 'Weight');
+    const weeklyIsPoop = await getWeeklyStatsString(response, 'Is Poop');
+    const weeklyIsBloated = await getWeeklyStatsString(response, 'Is Bloated');
+    const weeklyIsWatery = await getWeeklyStatsString(response, 'Is Watery');
+    const weeklyIsBadSleep = await getWeeklyStatsString(response, 'Is Bad Sleep');
+    
+    const weeklyBedTime = await getWeeklyStatsString(response, 'Bed Time');
+    const weeklyWakeTime = await getWeeklyStatsString(response, 'Wake Time');
+    const weeklySleepQuality = await getWeeklyStatsString(response, 'Sleep Quality');
+    const weeklySleepHours = await getWeeklyStatsString(response, 'Sleep Window');
+
+    // Process food data weekly
+    const weeklyFoods = [];
+    
+    // Get array of days for the week
+    const days = weeklyCal.map(item => item.day);
+    
+    // Get food for each day
+    for (const day of days) {
+      const dayFoods = await getDailyFoodsForDate(foodResponse, day);
+      weeklyFoods.push({
+        day: day,
+        foods: dayFoods
+      });
+    }
+    
+    // Format days with processed text values
+    const formattedDays = days.map((day, index) => {
+      return {
+        date: day,
+        nutrition: {
+          protein: Math.round(weeklyProt[index].value),
+          fat: Math.round(weeklyFat[index].value),
+          carbs: Math.round(weeklyCarb[index].value),
+          calories: Math.round(weeklyCal[index].value),
+          deficit: Math.round(weeklyDef[index].value)
+        },
+        movement: {
+          steps: Math.round(weeklyStep[index].value),
+          kcalFromMovement: Math.round(weeklyKcalFromMov[index].value),
+          zone2: {
+            duration: weeklyZone2Dur[index].value,
+            distance: weeklyZone2Dist[index].value
+          },
+          cycling: {
+            distance: weeklyCycleDist[index].value,
+            duration: weeklyCycleDur[index].value
+          },
+          workout: {
+            type: weeklyWType[index].value && weeklyWType[index].value.length > 0 ? 
+                 weeklyWType[index].value[0]?.text?.content || '' : '',
+            duration: weeklyWDur[index].value
+          }
+        },
+        biometrics: {
+          weight: weeklyWeight[index].value,
+          isPoop: weeklyIsPoop[index].value && weeklyIsPoop[index].value.length > 0 ? 
+                  weeklyIsPoop[index].value[0]?.text?.content === 'true' : false,
+          isBloated: weeklyIsBloated[index].value && weeklyIsBloated[index].value.length > 0 ? 
+                    weeklyIsBloated[index].value[0]?.text?.content === 'true' : false,
+          isWatery: weeklyIsWatery[index].value && weeklyIsWatery[index].value.length > 0 ? 
+                   weeklyIsWatery[index].value[0]?.text?.content === 'true' : false
+        },
+        sleep: {
+          isBadSleep: weeklyIsBadSleep[index].value && weeklyIsBadSleep[index].value.length > 0 ? 
+                     weeklyIsBadSleep[index].value[0]?.text?.content === 'true' : false,
+          bedTime: weeklyBedTime[index].value && weeklyBedTime[index].value.length > 0 ? 
+                  weeklyBedTime[index].value[0]?.text?.content : '',
+          wakeTime: weeklyWakeTime[index].value && weeklyWakeTime[index].value.length > 0 ? 
+                   weeklyWakeTime[index].value[0]?.text?.content : '',
+          quality: weeklySleepQuality[index].value && weeklySleepQuality[index].value.length > 0 ? 
+                  weeklySleepQuality[index].value[0]?.text?.content : '',
+          hours: weeklySleepHours[index].value && weeklySleepHours[index].value.length > 0 ? 
+                weeklySleepHours[index].value[0]?.text?.content : ''
+        },
+        foods: weeklyFoods[index]?.foods || []
+      };
+    });
+    
+    // Calculate weekly averages and totals
+    const weeklyAverages = {
+      nutrition: {
+        avgProtein: Math.round(weeklyProt.reduce((sum, day) => sum + day.value, 0) / 7),
+        avgFat: Math.round(weeklyFat.reduce((sum, day) => sum + day.value, 0) / 7),
+        avgCarbs: Math.round(weeklyCarb.reduce((sum, day) => sum + day.value, 0) / 7),
+        avgCalories: Math.round(weeklyCal.reduce((sum, day) => sum + day.value, 0) / 7),
+        totalDeficit: Math.round(weeklyDef.reduce((sum, day) => sum + day.value, 0))
+      },
+      movement: {
+        avgSteps: Math.round(weeklyStep.reduce((sum, day) => sum + day.value, 0) / 7),
+        totalKcalFromMovement: Math.round(weeklyKcalFromMov.reduce((sum, day) => sum + day.value, 0)),
+        totalZone2Minutes: weeklyZone2Dur.reduce((sum, day) => sum + day.value, 0),
+        totalZone2Distance: weeklyZone2Dist.reduce((sum, day) => sum + day.value, 0),
+        totalCyclingDistance: weeklyCycleDist.reduce((sum, day) => sum + day.value, 0),
+        totalCyclingMinutes: weeklyCycleDur.reduce((sum, day) => sum + day.value, 0),
+        totalWorkoutMinutes: weeklyWDur.reduce((sum, day) => sum + day.value, 0)
+      },
+      biometrics: {
+        avgWeight: weeklyWeight.filter(day => day.value > 0).length > 0 ?
+                  weeklyWeight.filter(day => day.value > 0).reduce((sum, day) => sum + day.value, 0) / 
+                  weeklyWeight.filter(day => day.value > 0).length : 0
+      }
+    };
+    
+    const result = {
+      dailyData: formattedDays,
+      weeklyAverages: weeklyAverages,
+      weekStart: days[0],
+      weekEnd: days[6]
+    };
+    
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching weekly data:', err);
+    res.status(500).json({ error: 'Error fetching weekly data' });
+  }
+});
+
+app.get('/api/tracker/weekly/macro', async(req,res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    const foodResponse = await notion.databases.query({
+      database_id: foodDatabaseId, 
+      page_size: 100,
+    });
+
+    // Get weekly stats for all metrics
+    const weeklyCal = await getWeeklyStats(response, 'Calories');
+    const weeklyDef = await getWeeklyStats(response, 'Deficit');
+    const weeklyProt = await getWeeklyStats(response, 'Protein');
+    const weeklyCarb = await getWeeklyStats(response, 'Carbs');
+    const weeklyFat = await getWeeklyStats(response, 'Fats');
+
+    const weeklyWeight = await getWeeklyStats(response, 'Weight');
+
+    
+
+    // Process food data weekly
+    const weeklyFoods = [];
+    
+    // Get array of days for the week
+    const days = weeklyCal.map(item => item.day);
+    
+    // Get food for each day
+    for (const day of days) {
+      const dayFoods = await getDailyFoodsForWeek(foodResponse, day);
+      weeklyFoods.push({
+        day: day,
+        foods: dayFoods
+      });
+    }
+    
+    // Format days with processed text values
+    const formattedDays = days.map((day, index) => {
+      return {
+        date: day,
+        nutrition: {
+          protein: Math.round(weeklyProt[index].value),
+          fat: Math.round(weeklyFat[index].value),
+          carbs: Math.round(weeklyCarb[index].value),
+          calories: Math.round(weeklyCal[index].value),
+          deficit: Math.round(weeklyDef[index].value),
+          weight: Math.round(weeklyWeight[index].value)
+        },
+        
+        foods: weeklyFoods[index]?.foods || []
+      };
+    });
+    
+    // Calculate weekly averages and totals
+    const weeklyAverages = {
+      nutrition: {
+        avgProtein: Math.round(weeklyProt.reduce((sum, day) => sum + day.value, 0) / 7),
+        avgFat: Math.round(weeklyFat.reduce((sum, day) => sum + day.value, 0) / 7),
+        avgCarbs: Math.round(weeklyCarb.reduce((sum, day) => sum + day.value, 0) / 7),
+        avgCalories: Math.round(weeklyCal.reduce((sum, day) => sum + day.value, 0) / 7),
+        totalDeficit: Math.round(weeklyDef.reduce((sum, day) => sum + day.value, 0)),
+        totalProtein:Math.round(weeklyProt.reduce((sum, day) => sum + day.value, 0)),
+        totalFat: Math.round(weeklyFat.reduce((sum, day) => sum + day.value, 0)),
+        totalCarbs: Math.round(weeklyCarb.reduce((sum, day) => sum + day.value, 0)),
+        totalCalories: Math.round(weeklyCal.reduce((sum, day) => sum + day.value, 0)),
+        avgWeight: Math.round(weeklyWeight.reduce((sum, day) => sum + day.value, 0) / 7),
+      },
+    };
+    
+    const result = {
+      dailyData: formattedDays,
+      weeklyAverages: weeklyAverages,
+      weekStart: days[0],
+      weekEnd: days[6]
+    };
+    
+    res.json({result});
+  } catch (err) {
+    console.error('Error fetching weekly data:', err);
+    res.status(500).json({ error: 'Error fetching weekly data' });
+  }
+});
+
+app.get('/api/tracker/weekly/deficit', async(req,res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    const foodResponse = await notion.databases.query({
+      database_id: foodDatabaseId, 
+      page_size: 100,
+    });
+
+    // Get weekly stats for all metrics
+    const weeklyCal = await getWeeklyStats(response, 'Calories');
+    const weeklyDef = await getWeeklyStats(response, 'Deficit');
+    
+  
+
+    // Process food data weekly
+    const weeklyFoods = [];
+    
+    // Get array of days for the week
+    const days = weeklyCal.map(item => item.day);
+    
+    // Get food for each day
+    for (const day of days) {
+      const dayFoods = await getDailyFoodsForWeek(foodResponse, day);
+      weeklyFoods.push({
+        day: day,
+        foods: dayFoods
+      });
+    }
+    
+    // Format days with processed text values
+    const formattedDays = days.map((day, index) => {
+      return {
+        date: day,
+        nutrition: {
+          calories: Math.round(weeklyCal[index].value),
+          deficit: Math.round(weeklyDef[index].value)
+        },
+        
+        foods: weeklyFoods[index]?.foods || []
+      };
+    });
+    
+    // Calculate weekly averages and totals
+    const weeklyAverages = {
+      nutrition: { 
+        avgCalories: Math.round(weeklyCal.reduce((sum, day) => sum + day.value, 0) / 7),
+        totalDeficit: Math.round(weeklyDef.reduce((sum, day) => sum + day.value, 0)),
+        totalCalories: Math.round(weeklyCal.reduce((sum, day) => sum + day.value, 0))
+      },
+    };
+
+    
+    const result = {
+      dailyData: formattedDays,
+      weeklyAverages: weeklyAverages,
+      weekStart: days[0],
+      weekEnd: days[6]
+    };
+    
+    res.json({result});
+  } catch (err) {
+    console.error('Error fetching weekly data:', err);
+    res.status(500).json({ error: 'Error fetching weekly data' });
+  }
+});
+
+
+// Helper function to get foods for a specific date
+async function getDailyFoodsForDate(foodResponse, dateString) {
+  const foods = [];
+  
+  foodResponse.results.forEach((page) => {
+    const dayProp = page.properties['Day'];
+    if (dayProp && Array.isArray(dayProp.title)) {
+      dayProp.title.forEach((titleObj) => {
+        if (titleObj.plain_text === dateString) {
+          const foodName = page.properties['Food Name']?.rich_text?.[0]?.text?.content || '';
+          const calories = page.properties['Calories']?.number || 0;
+          const protein = page.properties['Protein']?.number || 0;
+          const carbs = page.properties['Carbs']?.number || 0;
+          const fat = page.properties['Fat']?.number || 0;
+          
+          foods.push({
+            name: foodName,
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat
+          });
+        }
+      });
+    }
+  });
+  
+  return foods;
+}
+
+app.get('/api/weekly/exercise', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    // Get weekly stats for all exercise-related metrics
+    const weeklySteps = await getWeeklyStats(response, 'Steps');
+    const weeklyKcalFromMov = await getWeeklyStats(response, 'Kcal From Movement');
+    
+    // Cardio related metrics
+    const weeklyZone2Dur = await getWeeklyStats(response, 'Zone2 Duration');
+    const weeklyZone2Dist = await getWeeklyStats(response, 'Zone2 Distance');
+    const weeklyCycleDur = await getWeeklyStats(response, 'Cycling Duration');
+    const weeklyCycleDist = await getWeeklyStats(response, 'Cycling Distance');
+    
+    // Gym related metrics
+    const weeklyGymDur = await getWeeklyStats(response, 'Gym Duration');
+    const weeklyWorkoutType = await getWeeklyStatsString(response, 'Workout Type');
+    const weeklyWorkoutData = await getWeeklyStatsString(response, 'WorkoutData');
+    
+    // VO2Max - this is typically a measurement rather than a cumulative value
+    const weeklyVO2Max = await getWeeklyStats(response, 'VO2Max');
+    
+    // Get array of days for the week
+    const days = weeklySteps.map(item => item.day);
+    
+    // Format days with processed exercise data
+    const dailyExerciseData = days.map((day, index) => {
+      // Get workout type from select field (if available)
+      let workoutType = '';
+      if (weeklyWorkoutType[index].value && 
+          weeklyWorkoutType[index].value.select && 
+          weeklyWorkoutType[index].value.select.name) {
+        workoutType = weeklyWorkoutType[index].value.select.name;
+      }
+      
+      // Get workout data (if available)
+      let workoutData = null;
+      if (weeklyWorkoutData[index].value && 
+          weeklyWorkoutData[index].value.length > 0 && 
+          weeklyWorkoutData[index].value[0].text) {
+        workoutData = weeklyWorkoutData[index].value[0].text.content;
+        
+        // Try to parse JSON if it appears to be JSON
+        if (workoutData && (workoutData.startsWith('{') || workoutData.startsWith('['))) {
+          try {
+            workoutData = JSON.parse(workoutData);
+          } catch (e) {
+            // Keep as string if parsing fails
+          }
+        }
+      }
+      
+      return {
+        date: day,
+        steps: Math.round(weeklySteps[index].value) || 0,
+        kcalBurned: Math.round(weeklyKcalFromMov[index].value) || 0,
+        cardio: {
+          zone2: {
+            minutes: weeklyZone2Dur[index].value || 0,
+            distance: weeklyZone2Dist[index].value || 0,
+            // Add pace calculation if both duration and distance exist
+            pace: weeklyZone2Dist[index].value && weeklyZone2Dur[index].value ? 
+                  (weeklyZone2Dur[index].value / weeklyZone2Dist[index].value).toFixed(2) : null
+          },
+          cycling: {
+            minutes: weeklyCycleDur[index].value || 0,
+            distance: weeklyCycleDist[index].value || 0,
+            // Add speed calculation if both duration and distance exist
+            speed: weeklyCycleDist[index].value && weeklyCycleDur[index].value ? 
+                   ((weeklyCycleDist[index].value / (weeklyCycleDur[index].value / 60))).toFixed(2) : null
+          },
+          vo2max: weeklyVO2Max[index].value || null
+        },
+        strength: {
+          minutes: weeklyGymDur[index].value || 0,
+          workoutType: workoutType || null,
+          workoutData: workoutData
+        },
+        // Flag to easily check if any exercise was done on this day
+        hasExercise: weeklySteps[index].value > 0 || 
+                     weeklyZone2Dur[index].value > 0 || 
+                     weeklyCycleDur[index].value > 0 || 
+                     weeklyGymDur[index].value > 0
+      };
+    });
+    
+    // Calculate weekly totals and averages
+    const weeklyTotals = {
+      totalSteps: weeklySteps.reduce((sum, day) => sum + day.value, 0),
+      totalKcalBurned: Math.round(weeklyKcalFromMov.reduce((sum, day) => sum + day.value, 0)),
+      cardio: {
+        totalMinutes: (weeklyZone2Dur.reduce((sum, day) => sum + day.value, 0) || 0) + 
+                      (weeklyCycleDur.reduce((sum, day) => sum + day.value, 0) || 0),
+        zone2: {
+          totalMinutes: weeklyZone2Dur.reduce((sum, day) => sum + day.value, 0) || 0,
+          totalDistance: weeklyZone2Dist.reduce((sum, day) => sum + day.value, 0) || 0,
+          sessionsCount: weeklyZone2Dur.filter(day => day.value > 0).length
+        },
+        cycling: {
+          totalMinutes: weeklyCycleDur.reduce((sum, day) => sum + day.value, 0) || 0,
+          totalDistance: weeklyCycleDist.reduce((sum, day) => sum + day.value, 0) || 0,
+          sessionsCount: weeklyCycleDur.filter(day => day.value > 0).length
+        },
+        // For VO2Max, only report the latest value from the week (if any)
+        latestVO2Max: (() => {
+          const vo2maxEntries = weeklyVO2Max.filter(day => day.value > 0);
+          return vo2maxEntries.length > 0 ? vo2maxEntries[vo2maxEntries.length - 1].value : null;
+        })()
+      },
+      strength: {
+        totalMinutes: weeklyGymDur.reduce((sum, day) => sum + day.value, 0) || 0,
+        sessionsCount: weeklyGymDur.filter(day => day.value > 0).length,
+        // Count workout types
+        workoutTypes: (() => {
+          const types = {};
+          weeklyWorkoutType.forEach((day, index) => {
+            if (day.value && day.value.select && day.value.select.name && weeklyGymDur[index].value > 0) {
+              const type = day.value.select.name;
+              types[type] = (types[type] || 0) + 1;
+            }
+          });
+          return types;
+        })()
+      },
+      // Calculate active days (days with any exercise)
+      activeDays: dailyExerciseData.filter(day => day.hasExercise).length,
+      // Calculate rest days (days with no exercise recorded)
+      restDays: dailyExerciseData.filter(day => !day.hasExercise).length
+    };
+    
+    // Calculate averages
+    const weeklyAverages = {
+      avgDailySteps: Math.round(weeklyTotals.totalSteps / 7),
+      avgDailyKcalBurned: Math.round(weeklyTotals.totalKcalBurned / 7),
+      // Average stats for active days only
+      activeDay: {
+        avgSteps: Math.round(weeklyTotals.totalSteps / (weeklyTotals.activeDays || 1)),
+        avgKcalBurned: Math.round(weeklyTotals.totalKcalBurned / (weeklyTotals.activeDays || 1))
+      }
+    };
+    
+    // Prepare data for a week-at-a-glance visualization
+    const weekAtGlance = dailyExerciseData.map(day => {
+      return {
+        date: day.date,
+        steps: day.steps,
+        hasCardio: day.cardio.zone2.minutes > 0 || day.cardio.cycling.minutes > 0,
+        hasStrength: day.strength.minutes > 0,
+        totalActiveMinutes: (day.cardio.zone2.minutes || 0) + 
+                          (day.cardio.cycling.minutes || 0) + 
+                          (day.strength.minutes || 0),
+        kcalBurned: day.kcalBurned
+      };
+    });
+    
+    const result = {
+      weekStart: days[0],
+      weekEnd: days[days.length - 1],
+      dailyData: dailyExerciseData,
+      weekAtGlance,
+      totals: weeklyTotals,
+      averages: weeklyAverages
+    };
+    
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching weekly exercise data:', err);
+    res.status(500).json({ error: 'Error fetching weekly exercise data: ' + err.message });
+  }
+});
+
+function getWeeklyStatsBool(data, typeString) {
+  // Get current date
+  const today = new Date();
+  
+  // Find the Monday of the current week
+  const currentDay = today.getDay(); // 0 is Sunday, 1 is Monday, etc.
+  const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Adjust for week starting on Monday
+  
+  const mondayDate = new Date(today);
+  mondayDate.setDate(today.getDate() - daysFromMonday);
+  
+  // Create an array of dates for the current week (Monday to Sunday)
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(mondayDate);
+    date.setDate(mondayDate.getDate() + i);
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    weekDates.push(`${year} / ${month} / ${day}`);
+  }
+  
+  // Initialize results array with one object per day of the week
+  const weeklyResults = weekDates.map(dateString => {
+    return {
+      day: dateString,
+      value: false // Default to false
+    };
+  });
+  
+  // Fill in values from the data
+  data.results.forEach((page) => {
+    const dayProp = page.properties['Day'];
+    if (dayProp && Array.isArray(dayProp.title)) {
+      dayProp.title.forEach((titleObj) => {
+        // Check if the date is in our week array
+        const dayIndex = weekDates.indexOf(titleObj.plain_text);
+        if (dayIndex !== -1) {
+          const boolProperty = page.properties[typeString];
+          if (boolProperty && typeof boolProperty.checkbox === 'boolean') {
+            weeklyResults[dayIndex].value = boolProperty.checkbox;
+          }
+        }
+      });
+    }
+  });
+  
+  return weeklyResults;
+}
+
+app.get('/api/weekly/sleep', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    // Get weekly stats for all sleep-related metrics
+    const weeklyBedTime = await getWeeklyStatsString(response, 'Bed Time');
+    const weeklyWakeTime = await getWeeklyStatsString(response, 'Wake Time');
+    const weeklySleepWindow = await getWeeklyStatsString(response, 'Sleep Window');
+    const weeklySleepQuality = await getWeeklyStatsString(response, 'Sleep Quality');
+    const weeklyBadSleep = await getWeeklyStatsBool(response, 'Bad Sleep');
+    
+    // Get array of days for the week
+    const days = weeklyBedTime.map(item => item.day);
+    
+    // Function to parse time string in "HH:MM" format and return minutes since midnight
+    const parseTimeToMinutes = (timeString) => {
+      if (!timeString) return null;
+      
+      const [hours, minutes] = timeString.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+    
+    // Function to format minutes since midnight back to "HH:MM" format
+    const formatMinutesToTime = (minutes) => {
+      if (minutes === null || minutes === undefined) return null;
+      
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    };
+    
+    // Function to calculate sleep duration in minutes from bed time and wake time
+    const calculateSleepDuration = (bedTimeStr, wakeTimeStr) => {
+      if (!bedTimeStr || !wakeTimeStr) return null;
+      
+      let bedTime = parseTimeToMinutes(bedTimeStr);
+      let wakeTime = parseTimeToMinutes(wakeTimeStr);
+      
+      // Handle case where bedtime is later than wake time (sleeping past midnight)
+      if (bedTime > wakeTime) {
+        return (24 * 60 - bedTime) + wakeTime;
+      } else {
+        return wakeTime - bedTime;
+      }
+    };
+    
+    // Function to extract sleep window duration in minutes from a string like "8h 30m"
+    const parseSleepWindowToMinutes = (sleepWindowStr) => {
+      if (!sleepWindowStr) return null;
+      
+      let totalMinutes = 0;
+      
+      // Extract hours
+      const hoursMatch = sleepWindowStr.match(/(\d+)h/);
+      if (hoursMatch) {
+        totalMinutes += parseInt(hoursMatch[1]) * 60;
+      }
+      
+      // Extract minutes
+      const minutesMatch = sleepWindowStr.match(/(\d+)m/);
+      if (minutesMatch) {
+        totalMinutes += parseInt(minutesMatch[1]);
+      }
+      
+      return totalMinutes;
+    };
+    
+    // Function to format minutes as hours and minutes
+    const formatMinutes = (minutes) => {
+      if (!minutes) return null;
+      
+      const hours = Math.floor(minutes / 60);
+      const mins = minutes % 60;
+      
+      if (mins === 0) return `${hours}h`;
+      return `${hours}h ${mins}m`;
+    };
+    
+    // Format days with processed sleep data
+    const dailySleepData = days.map((day, index) => {
+      // Extract bed time and wake time
+      let bedTime = null;
+      if (weeklyBedTime[index].value && 
+          weeklyBedTime[index].value.length > 0 && 
+          weeklyBedTime[index].value[0].text) {
+        bedTime = weeklyBedTime[index].value[0].text.content;
+      }
+      
+      let wakeTime = null;
+      if (weeklyWakeTime[index].value && 
+          weeklyWakeTime[index].value.length > 0 && 
+          weeklyWakeTime[index].value[0].text) {
+        wakeTime = weeklyWakeTime[index].value[0].text.content;
+      }
+      
+      // Extract sleep window as recorded or calculate it from bed time and wake time
+      let sleepWindow = null;
+      if (weeklySleepWindow[index].value && 
+          weeklySleepWindow[index].value.length > 0 && 
+          weeklySleepWindow[index].value[0].text) {
+        sleepWindow = weeklySleepWindow[index].value[0].text.content;
+      } else if (bedTime && wakeTime) {
+        const durationMinutes = calculateSleepDuration(bedTime, wakeTime);
+        if (durationMinutes) {
+          sleepWindow = formatMinutes(durationMinutes);
+        }
+      }
+      
+      // Extract sleep quality
+      let sleepQuality = null;
+      if (weeklySleepQuality[index].value && 
+          weeklySleepQuality[index].value.select && 
+          weeklySleepQuality[index].value.select.name) {
+        sleepQuality = weeklySleepQuality[index].value.select.name;
+      }
+      
+      // Get sleep duration in minutes (for calculations)
+      let sleepDurationMinutes = null;
+      if (sleepWindow) {
+        sleepDurationMinutes = parseSleepWindowToMinutes(sleepWindow);
+      } else if (bedTime && wakeTime) {
+        sleepDurationMinutes = calculateSleepDuration(bedTime, wakeTime);
+      }
+      
+      // Check if sleep was recorded for this day
+      const hasSleepData = bedTime || wakeTime || sleepWindow || sleepQuality;
+      
+      return {
+        date: day,
+        bedTime,
+        wakeTime,
+        sleepWindow,
+        durationMinutes: sleepDurationMinutes,
+        quality: sleepQuality,
+        isBadSleep: weeklyBadSleep[index].value || false,
+        hasSleepData,
+        // Calculate bedtime consistency (difference from average bedtime)
+        // This will be calculated after getting average bedtime
+        bedTimeDeviation: null,
+        // Calculate sleep debt (difference from recommended 8 hours)
+        sleepDebt: sleepDurationMinutes ? 480 - sleepDurationMinutes : null
+      };
+    });
+    
+    // Calculate average bedtime in minutes since midnight
+    const validBedTimes = dailySleepData
+      .filter(day => day.bedTime)
+      .map(day => parseTimeToMinutes(day.bedTime));
+    
+    const avgBedTimeMinutes = validBedTimes.length > 0 
+      ? validBedTimes.reduce((sum, time) => sum + time, 0) / validBedTimes.length 
+      : null;
+    
+    // Calculate average wake time in minutes since midnight
+    const validWakeTimes = dailySleepData
+      .filter(day => day.wakeTime)
+      .map(day => parseTimeToMinutes(day.wakeTime));
+    
+    const avgWakeTimeMinutes = validWakeTimes.length > 0 
+      ? validWakeTimes.reduce((sum, time) => sum + time, 0) / validWakeTimes.length 
+      : null;
+    
+    // Calculate bedtime consistency (deviation from average)
+    if (avgBedTimeMinutes) {
+      dailySleepData.forEach(day => {
+        if (day.bedTime) {
+          const bedTimeMinutes = parseTimeToMinutes(day.bedTime);
+          // Calculate absolute difference in minutes
+          day.bedTimeDeviation = Math.abs(bedTimeMinutes - avgBedTimeMinutes);
+        }
+      });
+    }
+    
+    // Weekly sleep metrics
+    const weeklySleepMetrics = {
+      // Sleep duration metrics
+      totalSleepMinutes: dailySleepData.reduce((sum, day) => sum + (day.durationMinutes || 0), 0),
+      avgSleepDuration: dailySleepData.filter(day => day.durationMinutes).length > 0 
+        ? dailySleepData.reduce((sum, day) => sum + (day.durationMinutes || 0), 0) / 
+          dailySleepData.filter(day => day.durationMinutes).length 
+        : null,
+      shortestSleep: Math.min(...dailySleepData.filter(day => day.durationMinutes).map(day => day.durationMinutes) || [0]),
+      longestSleep: Math.max(...dailySleepData.filter(day => day.durationMinutes).map(day => day.durationMinutes) || [0]),
+      // Consistency metrics
+      avgBedTime: avgBedTimeMinutes ? formatMinutesToTime(Math.round(avgBedTimeMinutes)) : null,
+      avgWakeTime: avgWakeTimeMinutes ? formatMinutesToTime(Math.round(avgWakeTimeMinutes)) : null,
+      avgBedTimeDeviation: dailySleepData.filter(day => day.bedTimeDeviation).length > 0
+        ? dailySleepData.reduce((sum, day) => sum + (day.bedTimeDeviation || 0), 0) /
+          dailySleepData.filter(day => day.bedTimeDeviation).length
+        : null,
+      // Quality metrics
+      badSleepDays: dailySleepData.filter(day => day.isBadSleep).length,
+      sleepQualityDistribution: (() => {
+        const distribution = {};
+        dailySleepData.forEach(day => {
+          if (day.quality) {
+            distribution[day.quality] = (distribution[day.quality] || 0) + 1;
+          }
+        });
+        return distribution;
+      })(),
+      // Tracking completeness
+      daysTracked: dailySleepData.filter(day => day.hasSleepData).length,
+      daysWithCompleteTiming: dailySleepData.filter(day => day.bedTime && day.wakeTime).length,
+      daysWithQualityRating: dailySleepData.filter(day => day.quality).length
+    };
+    
+    // Format durations for better readability
+    weeklySleepMetrics.avgSleepDurationFormatted = weeklySleepMetrics.avgSleepDuration 
+      ? formatMinutes(Math.round(weeklySleepMetrics.avgSleepDuration)) 
+      : null;
+    weeklySleepMetrics.shortestSleepFormatted = weeklySleepMetrics.shortestSleep && weeklySleepMetrics.shortestSleep > 0
+      ? formatMinutes(weeklySleepMetrics.shortestSleep)
+      : null;
+    weeklySleepMetrics.longestSleepFormatted = weeklySleepMetrics.longestSleep && weeklySleepMetrics.longestSleep > 0
+      ? formatMinutes(weeklySleepMetrics.longestSleep)
+      : null;
+    weeklySleepMetrics.avgBedTimeDeviationFormatted = weeklySleepMetrics.avgBedTimeDeviation
+      ? formatMinutes(Math.round(weeklySleepMetrics.avgBedTimeDeviation))
+      : null;
+    
+    // Weekly sleep score calculation (custom metric from 0-100)
+    const calculateSleepScore = () => {
+      if (weeklySleepMetrics.daysTracked === 0) return null;
+      
+      let score = 0;
+      const trackedDays = weeklySleepMetrics.daysTracked;
+      
+      // Component 1: Average sleep duration (40 points max)
+      // Optimal sleep is 7-9 hours (420-540 minutes)
+      if (weeklySleepMetrics.avgSleepDuration) {
+        const avgDuration = weeklySleepMetrics.avgSleepDuration;
+        if (avgDuration >= 420 && avgDuration <= 540) {
+          score += 40; // Optimal range
+        } else if (avgDuration >= 360 && avgDuration < 420) {
+          score += 30; // Slightly low
+        } else if (avgDuration > 540 && avgDuration <= 600) {
+          score += 30; // Slightly high
+        } else if (avgDuration >= 300 && avgDuration < 360) {
+          score += 20; // Low
+        } else if (avgDuration > 600) {
+          score += 20; // High
+        } else {
+          score += 10; // Very low
+        }
+      }
+      
+      // Component 2: Sleep consistency (30 points max)
+      // Lower deviation from average bedtime is better
+      if (weeklySleepMetrics.avgBedTimeDeviation !== null) {
+        const avgDeviation = weeklySleepMetrics.avgBedTimeDeviation;
+        if (avgDeviation <= 15) {
+          score += 30; // Very consistent (within 15 min)
+        } else if (avgDeviation <= 30) {
+          score += 25; // Consistent (within 30 min)
+        } else if (avgDeviation <= 45) {
+          score += 20; // Fairly consistent (within 45 min)
+        } else if (avgDeviation <= 60) {
+          score += 15; // Somewhat inconsistent (within 1 hour)
+        } else if (avgDeviation <= 90) {
+          score += 10; // Inconsistent (within 1.5 hours)
+        } else {
+          score += 5; // Very inconsistent (more than 1.5 hours)
+        }
+      }
+      
+      // Component 3: Sleep quality (30 points max)
+      // Based on quality ratings and bad sleep days
+      const qualityDistribution = weeklySleepMetrics.sleepQualityDistribution;
+      let qualityScore = 0;
+      
+      // Check for quality ratings
+      if (weeklySleepMetrics.daysWithQualityRating > 0) {
+        const excellentDays = qualityDistribution['Excellent'] || 0;
+        const goodDays = qualityDistribution['Good'] || 0;
+        const fairDays = qualityDistribution['Fair'] || 0;
+        const poorDays = qualityDistribution['Poor'] || 0;
+        
+        qualityScore = ((excellentDays * 30) + (goodDays * 22) + (fairDays * 15) + (poorDays * 7)) / 
+                        weeklySleepMetrics.daysWithQualityRating;
+      }
+      
+      // Penalize for bad sleep days
+      const badSleepRatio = weeklySleepMetrics.badSleepDays / trackedDays;
+      qualityScore = Math.max(0, qualityScore - (badSleepRatio * 10));
+      
+      score += qualityScore;
+      
+      // Adjust for tracking completeness
+      const trackingCompleteness = (weeklySleepMetrics.daysWithCompleteTiming + weeklySleepMetrics.daysWithQualityRating) / (trackedDays * 2);
+      score = score * Math.min(1, trackingCompleteness + 0.5);
+      
+      return Math.round(score);
+    };
+    
+    weeklySleepMetrics.sleepScore = calculateSleepScore();
+    
+    // Weekly recommendations based on sleep metrics
+    const generateRecommendations = () => {
+      const recommendations = [];
+      
+      // Only generate recommendations if we have enough data
+      if (weeklySleepMetrics.daysTracked < 3) {
+        recommendations.push("Track your sleep more consistently to receive personalized recommendations.");
+        return recommendations;
+      }
+      
+      // Recommendation for sleep duration
+      if (weeklySleepMetrics.avgSleepDuration) {
+        if (weeklySleepMetrics.avgSleepDuration < 420) {
+          recommendations.push("Consider increasing your sleep duration. Aim for at least 7 hours per night.");
+        } else if (weeklySleepMetrics.avgSleepDuration > 540) {
+          recommendations.push("Your average sleep duration is higher than recommended. Consider if you're spending too much time in bed.");
+        }
+      }
+      
+      // Recommendation for sleep consistency
+      if (weeklySleepMetrics.avgBedTimeDeviation) {
+        if (weeklySleepMetrics.avgBedTimeDeviation > 60) {
+          recommendations.push("Your bedtime varies significantly. Try to establish a more consistent sleep schedule.");
+        }
+      }
+      
+      // Recommendation for sleep quality
+      if (weeklySleepMetrics.badSleepDays > 2) {
+        recommendations.push("You've reported multiple days of poor sleep quality. Consider reviewing your sleep environment or habits.");
+      }
+      
+      // Add general recommendation if none were generated
+      if (recommendations.length === 0) {
+        recommendations.push("Your sleep patterns look good. Continue maintaining your healthy sleep habits.");
+      }
+      
+      return recommendations;
+    };
+    
+    weeklySleepMetrics.recommendations = generateRecommendations();
+    
+    // Prepare data for a week-at-a-glance visualization
+    const sleepAtGlance = dailySleepData.map(day => {
+      return {
+        date: day.date,
+        duration: day.durationMinutes ? day.durationMinutes / 60 : null, // Hours
+        bedTime: day.bedTime,
+        wakeTime: day.wakeTime,
+        quality: day.quality,
+        hasSleepData: day.hasSleepData,
+        sleepDebt: day.sleepDebt ? day.sleepDebt / 60 : null // Hours
+      };
+    });
+    
+    const result = {
+      weekStart: days[0],
+      weekEnd: days[days.length - 1],
+      dailyData: dailySleepData,
+      weekAtGlance: sleepAtGlance,
+      metrics: weeklySleepMetrics
+    };
+    
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching weekly sleep data:', err);
+    res.status(500).json({ error: 'Error fetching weekly sleep data: ' + err.message });
+  }
+});
+
+app.get('/api/weekly/weight', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    // Get weekly stats for weight and health conditions
+    const weeklyWeight = await getWeeklyStats(response, 'Weight');
+    const weeklyBloated = await getWeeklyStatsBool(response, 'Bloated');
+    const weeklyPoop = await getWeeklyStatsBool(response, 'Poop');
+    const weeklyWatery = await getWeeklyStatsBool(response, 'Watery');
+    const weeklyBadSleep = await getWeeklyStatsBool(response, 'Bad Sleep');
+    
+    // Get array of days for the week
+    const days = weeklyWeight.map(item => item.day);
+    
+    // Format days with processed weight data
+    const dailyWeightData = days.map((day, index) => {
+      return {
+        date: day,
+        weight: weeklyWeight[index].value || null,
+        conditions: {
+          bloated: weeklyBloated[index].value || false,
+          poop: weeklyPoop[index].value || false,
+          watery: weeklyWatery[index].value || false,
+          badSleep: weeklyBadSleep[index].value || false
+        },
+        // Flag to easily check if weight was recorded on this day
+        hasWeightData: weeklyWeight[index].value > 0
+      };
+    });
+    
+    // Calculate weight analytics and trends
+    const weightAnalytics = {
+      // Weight days recorded
+      daysRecorded: dailyWeightData.filter(day => day.hasWeightData).length,
+      
+      // Calculate average weight for the week (only from days with data)
+      averageWeight: (() => {
+        const weightsRecorded = dailyWeightData.filter(day => day.hasWeightData);
+        if (weightsRecorded.length === 0) return null;
+        
+        const sum = weightsRecorded.reduce((total, day) => total + day.weight, 0);
+        return parseFloat((sum / weightsRecorded.length).toFixed(1));
+      })(),
+      
+      // Calculate min and max weight for the week
+      lowestWeight: (() => {
+        const weights = dailyWeightData
+          .filter(day => day.hasWeightData)
+          .map(day => day.weight);
+        return weights.length > 0 ? Math.min(...weights) : null;
+      })(),
+      
+      highestWeight: (() => {
+        const weights = dailyWeightData
+          .filter(day => day.hasWeightData)
+          .map(day => day.weight);
+        return weights.length > 0 ? Math.max(...weights) : null;
+      })(),
+      
+      // Calculate weight change over the week (first recorded to last recorded)
+      weeklyChange: (() => {
+        const weightsRecorded = dailyWeightData.filter(day => day.hasWeightData);
+        if (weightsRecorded.length < 2) return null;
+        
+        const firstWeight = weightsRecorded[0].weight;
+        const lastWeight = weightsRecorded[weightsRecorded.length - 1].weight;
+        const change = parseFloat((lastWeight - firstWeight).toFixed(1));
+        
+        return {
+          value: change,
+          direction: change > 0 ? 'increase' : change < 0 ? 'decrease' : 'no change',
+          percentage: parseFloat(((change / firstWeight) * 100).toFixed(1))
+        };
+      })(),
+      
+      // Calculate day-to-day changes
+      dailyChanges: (() => {
+        const changes = [];
+        const weightsRecorded = dailyWeightData.filter(day => day.hasWeightData);
+        
+        for (let i = 1; i < weightsRecorded.length; i++) {
+          const prevWeight = weightsRecorded[i-1].weight;
+          const currentWeight = weightsRecorded[i].weight;
+          const change = parseFloat((currentWeight - prevWeight).toFixed(1));
+          
+          changes.push({
+            fromDate: weightsRecorded[i-1].date,
+            toDate: weightsRecorded[i].date,
+            change: change,
+            direction: change > 0 ? 'increase' : change < 0 ? 'decrease' : 'no change'
+          });
+        }
+        
+        return changes;
+      })(),
+      
+      // Calculate moving average (if enough data points)
+      movingAverage: (() => {
+        const weightsRecorded = dailyWeightData.filter(day => day.hasWeightData);
+        if (weightsRecorded.length < 3) return null;
+        
+        const movingAverages = [];
+        for (let i = 2; i < weightsRecorded.length; i++) {
+          const threePointAvg = (
+            weightsRecorded[i].weight + 
+            weightsRecorded[i-1].weight + 
+            weightsRecorded[i-2].weight
+          ) / 3;
+          
+          movingAverages.push({
+            date: weightsRecorded[i].date,
+            value: parseFloat(threePointAvg.toFixed(1))
+          });
+        }
+        
+        return movingAverages;
+      })(),
+      
+      // Calculate correlations with health conditions
+      healthCorrelations: {
+        bloatedDays: dailyWeightData.filter(day => day.conditions.bloated).length,
+        poopDays: dailyWeightData.filter(day => day.conditions.poop).length,
+        wateryDays: dailyWeightData.filter(day => day.conditions.watery).length,
+        badSleepDays: dailyWeightData.filter(day => day.conditions.badSleep).length,
+        
+        // Average weight on days with each condition vs days without
+        bloatedWeight: (() => {
+          const bloatedDays = dailyWeightData.filter(day => day.hasWeightData && day.conditions.bloated);
+          const nonBloatedDays = dailyWeightData.filter(day => day.hasWeightData && !day.conditions.bloated);
+          
+          if (bloatedDays.length === 0 || nonBloatedDays.length === 0) return null;
+          
+          const avgBloated = bloatedDays.reduce((sum, day) => sum + day.weight, 0) / bloatedDays.length;
+          const avgNonBloated = nonBloatedDays.reduce((sum, day) => sum + day.weight, 0) / nonBloatedDays.length;
+          
+          return {
+            withCondition: parseFloat(avgBloated.toFixed(1)),
+            withoutCondition: parseFloat(avgNonBloated.toFixed(1)),
+            difference: parseFloat((avgBloated - avgNonBloated).toFixed(1))
+          };
+        })(),
+        
+        poopWeight: (() => {
+          const poopDays = dailyWeightData.filter(day => day.hasWeightData && day.conditions.poop);
+          const nonPoopDays = dailyWeightData.filter(day => day.hasWeightData && !day.conditions.poop);
+          
+          if (poopDays.length === 0 || nonPoopDays.length === 0) return null;
+          
+          const avgPoop = poopDays.reduce((sum, day) => sum + day.weight, 0) / poopDays.length;
+          const avgNonPoop = nonPoopDays.reduce((sum, day) => sum + day.weight, 0) / nonPoopDays.length;
+          
+          return {
+            withCondition: parseFloat(avgPoop.toFixed(1)),
+            withoutCondition: parseFloat(avgNonPoop.toFixed(1)),
+            difference: parseFloat((avgPoop - avgNonPoop).toFixed(1))
+          };
+        })()
+      }
+    };
+    
+    // Generate insights based on the data
+    const generateInsights = () => {
+      const insights = [];
+      
+      // Only generate insights if we have enough data
+      if (weightAnalytics.daysRecorded < 3) {
+        insights.push("Track your weight more consistently to receive detailed insights.");
+        return insights;
+      }
+      
+      // Weight change insights
+      if (weightAnalytics.weeklyChange) {
+        const change = weightAnalytics.weeklyChange;
+        if (Math.abs(change.percentage) > 2) {
+          insights.push(`You had a significant ${change.direction} of ${Math.abs(change.value)} kg (${Math.abs(change.percentage)}%) this week.`);
+        } else if (Math.abs(change.percentage) > 0.5) {
+          insights.push(`You had a moderate ${change.direction} of ${Math.abs(change.value)} kg this week.`);
+        } else {
+          insights.push("Your weight remained relatively stable this week.");
+        }
+      }
+      
+      // Fluctuation insights
+      if (weightAnalytics.highestWeight && weightAnalytics.lowestWeight) {
+        const range = weightAnalytics.highestWeight - weightAnalytics.lowestWeight;
+        if (range > 1.5) {
+          insights.push(`You experienced significant fluctuations of ${range.toFixed(1)} kg between your highest and lowest weights.`);
+        }
+      }
+      
+      // Health condition correlations
+      if (weightAnalytics.healthCorrelations.bloatedWeight && 
+          Math.abs(weightAnalytics.healthCorrelations.bloatedWeight.difference) > 0.5) {
+        insights.push(`On days you reported bloating, your weight was ${Math.abs(weightAnalytics.healthCorrelations.bloatedWeight.difference).toFixed(1)} kg ${weightAnalytics.healthCorrelations.bloatedWeight.difference > 0 ? 'higher' : 'lower'}.`);
+      }
+      
+      if (weightAnalytics.healthCorrelations.poopWeight && 
+          Math.abs(weightAnalytics.healthCorrelations.poopWeight.difference) > 0.5) {
+        insights.push(`Weight tends to be ${Math.abs(weightAnalytics.healthCorrelations.poopWeight.difference).toFixed(1)} kg ${weightAnalytics.healthCorrelations.poopWeight.difference > 0 ? 'higher' : 'lower'} on days you reported a bowel movement.`);
+      }
+      
+      // Add a general insight if none generated
+      if (insights.length === 0) {
+        insights.push("Continue tracking your weight consistently to reveal patterns and trends.");
+      }
+      
+      return insights;
+    };
+    
+    weightAnalytics.insights = generateInsights();
+    
+    // Prepare data for weight-at-a-glance visualization
+    const weightAtGlance = dailyWeightData.map(day => {
+      // Calculate day-to-day change if possible
+      let dayChange = null;
+      const prevDay = dailyWeightData[dailyWeightData.indexOf(day) - 1];
+      if (prevDay && prevDay.hasWeightData && day.hasWeightData) {
+        dayChange = parseFloat((day.weight - prevDay.weight).toFixed(1));
+      }
+      
+      return {
+        date: day.date,
+        weight: day.weight,
+        dayChange: dayChange,
+        conditions: day.conditions,
+        hasWeightData: day.hasWeightData
+      };
+    });
+    
+    const result = {
+      weekStart: days[0],
+      weekEnd: days[days.length - 1],
+      dailyData: dailyWeightData,
+      weightAtGlance,
+      analytics: weightAnalytics
+    };
+    
+    res.json(result);
+  } catch (err) {
+    console.error('Error fetching weekly weight data:', err);
+    res.status(500).json({ error: 'Error fetching weekly weight data: ' + err.message });
+  }
+});
 
 
 app.listen(PORT, () => {

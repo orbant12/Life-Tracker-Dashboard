@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Moon, Clock, BedDouble, Coffee, Zap, ArrowRight, AlertTriangle, Smile } from 'lucide-react';
 
-const SleepPanel = () => {
+const SleepPanel = ({selectedDate}) => {
   const [activeTab, setActiveTab] = useState('duration');
   const [isLoading, setIsLoading] = useState(false); // New loading state
   const [formData, setFormData] = useState({
@@ -29,15 +29,16 @@ const SleepPanel = () => {
     setIsLoading(true); // Start loading
     
     // Prepare request body based on active tab
-    let requestBody = {
-      sleepType: activeTab
+    let requestBody: any = {
+      sleepType: activeTab,
+      date: selectedDate
     };
     
     if (activeTab === 'duration') {
       // For duration tab, only log the quality
       requestBody = {
         ...requestBody,
-        sleepQuality: formData.sleepQuality
+        sleepQuality: formData.sleepQuality,
       };
     } else if (activeTab === 'timing') {
       // Calculate sleep window for the payload
@@ -47,7 +48,7 @@ const SleepPanel = () => {
         ...requestBody,
         bedTime: formData.bedTime,
         wakeTime: formData.wakeTime,
-        sleepWindow
+        sleepWindow,
       };
     }
     

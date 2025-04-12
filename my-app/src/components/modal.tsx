@@ -19,7 +19,7 @@ const style = {
   p: 0,
 };
 
-export default function BasicModal({foodData, handleLogAmmount}) {
+export default function BasicModal({foodData, handleLogAmmount,selectedData}) {
   const [open, setOpen] = React.useState(false);
   const [amount, setAmount] = React.useState(0)
   const [nameTitle, setNameTitle] = React.useState(0)
@@ -71,7 +71,8 @@ export default function BasicModal({foodData, handleLogAmmount}) {
             carbs: addedCarbs,
             fats: addedFats,
             servingSize: activeAmount,
-            servingUnit: serving
+            servingUnit: serving,
+            date:selectedData
           }),
         });
 
@@ -214,7 +215,6 @@ export default function BasicModal({foodData, handleLogAmmount}) {
             )
               }
             { isPiece != null && <h2 className='font-[700] text-xl opacity-50 text-center m-10'>Or</h2>}
-            {isPiece != null &&
               <InputCalories 
                   title={nameTitle}
                   isPiece={isPiece}
@@ -239,7 +239,7 @@ export default function BasicModal({foodData, handleLogAmmount}) {
                   }}
                   isLoading={isLoading}
               />
-              }
+              
           </Typography>
         </Box>
       </Modal>
@@ -264,31 +264,39 @@ export const InputCalories = ({
 
     return (
         <div className='flex flex-row w-[100%] justify-between items-center'>
-        <div className="w-[60%] p-4 flex flex-col justify-center border border-gray-200" style={{borderBottomLeftRadius:10, borderTopRightRadius:10}}>
-            <div className="mb-2">
-                <label 
-                    htmlFor="egg-input" 
-                    className="block text-sm font-bold opacity-70 text-gray-700"
-                >
-                    {isPiece ? "Number" : "Grams"} of {title}:
-                </label>
-            </div>
-            <div className="flex flex-row items-center mb-3">
-                <div className="relative w-full">
-                    <input
-                        id="egg-input"
-                        type="number"
-                        min="0"
-                        value={val}
-                        onChange={handleChange}
-                        className="w-full p-2 pr-12 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
-                        aria-label="Enter number of eggs"
-                        disabled={isLoading}
-                    />
+          {isPiece != null ?
+            <div className="w-[60%] p-4 flex flex-col justify-center border border-gray-200" style={{borderBottomLeftRadius:10, borderTopRightRadius:10}}>
+                
+                  <div className="mb-2">
+                  <label 
+                      htmlFor="egg-input" 
+                      className="block text-sm font-bold opacity-70 text-gray-700"
+                  >
+                      {isPiece ? "Number" : "Grams"} of {title}:
+                  </label>
+                  </div>
+                  
+                <div className="flex flex-row items-center mb-3">
+                    <div className="relative w-full">
+                        <input
+                            id="egg-input"
+                            type="number"
+                            min="0"
+                            value={val}
+                            onChange={handleChange}
+                            className="w-full p-2 pr-12 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 focus:outline-none"
+                            aria-label="Enter number of eggs"
+                            disabled={isLoading}
+                        />
+                    </div>
                 </div>
+                
+                
+      
             </div>
-  
-        </div>
+            :
+            <div className='mb-5 h-[70px]'></div>
+          }
         <div 
           onClick={!isLoading ? handleAdd : undefined}
           className={`flex flex-col justify-center mr-10 w-[150px] h-[50px] text-center align-center 

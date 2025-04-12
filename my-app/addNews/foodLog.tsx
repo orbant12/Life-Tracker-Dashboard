@@ -18,7 +18,7 @@ interface IconOption {
     label: string;
   }
 
-export const FoodList = ({ foodData, handleLogAmmount, modalToggle,setModalToggle }) => {
+export const FoodList = ({ foodData, handleLogAmmount, modalToggle,setModalToggle,selectedData }) => {
     // Sample data if none is provided
   
     return (
@@ -37,7 +37,7 @@ export const FoodList = ({ foodData, handleLogAmmount, modalToggle,setModalToggl
         </div>
         
         {/* Table Body */}
-        <BasicModal handleLogAmmount={handleLogAmmount} foodData={foodData} />
+        <BasicModal selectedData={selectedData} handleLogAmmount={handleLogAmmount} foodData={foodData} />
 
       </div>
     );
@@ -46,7 +46,7 @@ export const FoodList = ({ foodData, handleLogAmmount, modalToggle,setModalToggl
 
 
 export const FoodPanel = ({
-    
+  selectedData
   }) => {
       
       const [modalToggle, setModalToggle] = useState(false); 
@@ -70,6 +70,7 @@ export const FoodPanel = ({
                       handleLogAmmount={handleLogAmmount}
                       setModalToggle={setModalToggle}
                       modalToggle={modalToggle}
+                      selectedData={selectedData}
                     />
       
               </div>      
@@ -83,6 +84,7 @@ export const FoodPanel = ({
                       handleLogAmmount={handleLogAmmount}
                       modalToggle={modalToggle}
                       setModalToggle={setModalToggle}
+                      selectedData={selectedData}
                     />
       
               </div>      
@@ -96,6 +98,7 @@ export const FoodPanel = ({
                       handleLogAmmount={handleLogAmmount}
                       modalToggle={modalToggle}
                       setModalToggle={setModalToggle}
+                      selectedData={selectedData}
                     />
       
               </div>      
@@ -109,6 +112,7 @@ export const FoodPanel = ({
                       handleLogAmmount={handleLogAmmount}
                       modalToggle={modalToggle}
                       setModalToggle={setModalToggle}
+                      selectedData={selectedData}
                     />
       
               </div>      
@@ -122,6 +126,7 @@ export const FoodPanel = ({
                       handleLogAmmount={handleLogAmmount}
                       modalToggle={modalToggle}
                       setModalToggle={setModalToggle}
+                      selectedData={selectedData}
                     />
       
               </div>      
@@ -135,6 +140,7 @@ export const FoodPanel = ({
                       handleLogAmmount={handleLogAmmount}
                       modalToggle={modalToggle}
                       setModalToggle={setModalToggle}
+                      selectedData={selectedData}
                     />
       
               </div>      
@@ -148,6 +154,7 @@ export const FoodPanel = ({
                       handleLogAmmount={handleLogAmmount}
                       modalToggle={modalToggle}
                       setModalToggle={setModalToggle}
+                      selectedData={selectedData}
                     />
       
               </div>      
