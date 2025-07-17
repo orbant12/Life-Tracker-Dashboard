@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { Activity, ChevronRight, TrendingUp, Clock, MapPin, Dumbbell, Bike, FolderOpenDotIcon, CalculatorIcon } from 'lucide-react';
+import { Activity, ChevronRight, TrendingUp, Clock, MapPin, Dumbbell, Bike, FolderOpenDotIcon, CalculatorIcon, AlertCircle } from 'lucide-react';
 import { GiOpenedFoodCan } from 'react-icons/gi';
 
 // Enhanced Pie Chart Component
@@ -35,7 +35,7 @@ const EnhancedPieChart = ({ data }) => {
 
 
 // Stat Card Component
-const StatCard = ({ icon, title, value, unit,percent }) => {
+const StatCard = ({ icon, title, value, unit, percent }) => {
   return (
     <div className="bg-white rounded-lg shadow-md p-4 flex flex-wrap justify-around items-center space-x-4 w-[25%]">
       <div className="bg-blue-100 p-3 rounded-full">
@@ -54,7 +54,7 @@ const StatCard = ({ icon, title, value, unit,percent }) => {
 };
 
 // Main Widget Component
-const Widget = ({ title, chartData, total, icon,chartTitle }) => {
+const Widget = ({ title, chartData, total, icon, chartTitle }) => {
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 h-full w-[40%]">
       <div className="p-5 border-b border-gray-100">
@@ -65,7 +65,7 @@ const Widget = ({ title, chartData, total, icon,chartTitle }) => {
             </div>
             <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
           </div>
-          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full font-medium">Today</span>
+          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full font-medium">Weekly</span>
         </div>
       </div>
       
@@ -79,8 +79,6 @@ const Widget = ({ title, chartData, total, icon,chartTitle }) => {
     </div>
   );
 };
-
-
 
 // Activity Summary Card
 const ActivitySummaryWeekly = ({ data }) => {
@@ -214,131 +212,217 @@ const ActivitySummaryWeekly = ({ data }) => {
   );
 };
 
-// Main Exercise Tracker Panel
+// Loading Component
+const LoadingState = () => {
+  return (
+    <div className="bg-gray-50 p-6 rounded-xl h-full flex flex-col items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+      <p className="text-gray-600 font-medium">Loading weekly nutrition data...</p>
+    </div>
+  );
+};
+
+// Error Component
+const ErrorState = ({ error, onRetry }) => {
+  return (
+    <div className="bg-gray-50 p-6 rounded-xl h-full flex flex-col items-center justify-center">
+      <div className="bg-red-100 p-4 rounded-xl mb-4 w-full max-w-md">
+        <div className="flex items-center">
+          <div className="flex-shrink-0 text-red-500">
+            <AlertCircle className="h-6 w-6" />
+          </div>
+          <div className="ml-3">
+            <h3 className="text-sm font-medium text-red-800">Error loading weekly nutrition data</h3>
+            <p className="mt-1 text-sm text-red-700">{error.message || "An unexpected error occurred"}</p>
+          </div>
+        </div>
+      </div>
+      <button 
+        onClick={onRetry}
+        className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow hover:bg-blue-600 transition-colors"
+      >
+        Retry
+      </button>
+    </div>
+  );
+};
+
+// Empty State Component
+const EmptyState = () => {
+  return (
+    <div className='flex flex-col items-center justify-center w-full h-full'>
+      <div className='flex flex-col items-center justify-center'>
+        <FolderOpenDotIcon className='h-10 w-10 text-gray-400' />
+        <p className='text-gray-500 text-sm font-[600] mt-2'>No weekly nutrition data available</p>
+      </div>
+    </div>
+  );
+};
+
+// Main Weekly Food Tracker Panel
 const FoodTrackerPanelWeekly = () => {
   const [currWeight, setCurrWeight] = useState(0);
-  const [foodList, setFoodList] = useState([])
-   const [overall,setOverall] = useState<any[]>([
-          {
-            name: 'Protein',
-            value: 500,
-            color: 'cyan'
-          },
-          {
-            name: 'Fat',
-            value: 0,
-            color: 'brown'
-          },
-          {
-            name: 'Carbs',
-            value: 0,
-            color: 'black'
-          },
-        ]);
+  const [foodList, setFoodList] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [overall, setOverall] = useState<any[]>([
+    {
+      name: 'Protein',
+      value: 0,
+      color: 'cyan'
+    },
+    {
+      name: 'Fat',
+      value: 0,
+      color: 'brown'
+    },
+    {
+      name: 'Carbs',
+      value: 0,
+      color: 'orange'
+    },
+  ]);
   
-          useEffect(() => {
-            const fetchDailyDeficit = async () => {
-              try {
-                const res = await fetch('/api/tracker/weekly/macro');
-                const data = await res.json();
-                
-                setOverall([
-                  {
-                    name: 'Protein',
-                    value: data.result.weeklyAverages.nutrition.totalProtein,
-                    color: 'cyan'
-                  },
-                  {
-                    name: 'Fat',
-                    value: data.result.weeklyAverages.nutrition.totalFat,
-                    color: 'brown'
-                  },
-                  {
-                    name: 'Carbs',
-                    value: data.result.weeklyAverages.nutrition.totalCarbs,
-                    color: 'orange'
-                  },
-                ]);
+  const fetchData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const res = await fetch('/api/tracker/weekly/macro');
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to fetch weekly nutrition data');
+      }
+      
+      const data = await res.json();
+      
+      // Check if data has the expected structure
+      if (!data.result || !data.result.weeklyAverages || !data.result.weeklyAverages.nutrition) {
+        throw new Error('Invalid data format received from API');
+      }
+      
+      const nutrition = data.result.weeklyAverages.nutrition;
+      
+      setOverall([
+        {
+          name: 'Protein',
+          value: nutrition.totalProtein || 0,
+          color: 'cyan'
+        },
+        {
+          name: 'Fat',
+          value: nutrition.totalFat || 0,
+          color: 'brown'
+        },
+        {
+          name: 'Carbs',
+          value: nutrition.totalCarbs || 0,
+          color: 'orange'
+        },
+      ]);
 
-                setCurrWeight(data.result.dailyData[0].nutrition.weight);
-                setFoodList(data.result.dailyData)    
-         
-              } catch (err) {
-                console.error('Error fetching daily deficit:', err);
-              }
-            };
-        
-            
-            fetchDailyDeficit();
-          }, []);
-  
+      // Set weight and food list if data is available
+      if (data.result.dailyData && data.result.dailyData.length > 0 && data.result.dailyData[0].nutrition) {
+        setCurrWeight(data.result.dailyData[0].nutrition.weight || 0);
+        setFoodList(data.result.dailyData);
+      }
+      
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Error fetching weekly nutrition data:', err);
+      setError(err instanceof Error ? err : new Error('Unknown error occurred'));
+      setIsLoading(false);
+    }
+  };
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Handle retry on error
+  const handleRetry = () => {
+    fetchData();
+  };
+
+  // Loading state
+  if (isLoading) {
+    return <LoadingState />;
+  }
+
+  // Error state
+  if (error) {
+    return <ErrorState error={error} onRetry={handleRetry} />;
+  }
+
+  // Calculate total macros with safety check to prevent NaN
+  const totalMacros = overall.reduce((acc, item) => acc + (Number(item.value) || 0), 0);
 
   return (
     <div className="bg-gray-50 p-6 rounded-xl overflow-y-scroll h-full">
-
-    {overall.reduce((acc, item) => acc + item.value, 0) > 0 ? ( 
-    <>
-      
-      {/* Main widgets */}
-            <div className="flex flex-row justify-around w-full mb-5">
-              <StatCard 
-                icon={<Clock className="h-5 w-5 text-blue-600" />} 
-                title="Protein" 
-                  value={overall[0].value}
-                  percent={Math.round((overall[0].value / overall.reduce((acc, item) => acc + item.value, 0)) * 100)}
-                unit="g"
-              />
-              <StatCard 
-                icon={<MapPin className="h-5 w-5 text-blue-600" />} 
-                title="Fat" 
-                  value={overall[1].value}
-                  percent={Math.round(overall[1].value / overall.reduce((acc, item) => acc + item.value, 0) * 100)}
-                unit="g"
-              />
-              <StatCard 
-                icon={<Clock className="h-5 w-5 text-blue-600" />} 
-                title="Carbs" 
-                  value={overall[2].value}
-                  percent={Math.round(overall[2].value / overall.reduce((acc, item) => acc + item.value, 0)  * 100)}
-                unit="g"
-              />
-            </div>
-     
-      <div className='flex flex-col items-center justify-center w-full'>
-        <div className="flex flex-row justify-around w-[100%] mt-5 mb-5">
-            <Widget 
+      {totalMacros > 0 ? ( 
+        <>
+          {/* Stats Overview */}
+          <div className="flex flex-row justify-around w-full mb-5">
+            <StatCard 
+              icon={<Clock className="h-5 w-5 text-blue-600" />} 
+              title="Protein" 
+              value={overall[0].value}
+              percent={Math.round((overall[0].value / totalMacros) * 100) || 0}
+              unit="g"
+            />
+            <StatCard 
+              icon={<MapPin className="h-5 w-5 text-blue-600" />} 
+              title="Fat" 
+              value={overall[1].value}
+              percent={Math.round((overall[1].value / totalMacros) * 100) || 0}
+              unit="g"
+            />
+            <StatCard 
+              icon={<Clock className="h-5 w-5 text-blue-600" />} 
+              title="Carbs" 
+              value={overall[2].value}
+              percent={Math.round((overall[2].value / totalMacros) * 100) || 0}
+              unit="g"
+            />
+          </div>
+          
+          {/* Main widgets */}
+          <div className='flex flex-col items-center justify-center w-full'>
+            <div className="flex flex-row justify-around w-[100%] mt-5 mb-5">
+              <Widget 
                 title="Weekly Overall Macros" 
                 chartData={overall} 
-                total={`${overall.reduce((acc, item) => acc + item.value, 0)} g`}
+                total={`${totalMacros} g`}
                 icon={<Activity className="h-5 w-5 text-blue-600" />}
                 chartTitle={'Total'}
-            />
+              />
 
-            <Widget
+              <Widget
                 title="Weekly Protein Goal" 
-                chartData={[overall[0], {name: 'Goal', value: Math.round(((currWeight * 1.6) * 7) - overall[0].value), color: 'green'}]}
-                total={`${Math.round(currWeight * 1.6) * 7} g`}
+                chartData={[
+                  overall[0], 
+                  {
+                    name: 'Goal', 
+                    value: Math.max(0, Math.round(((currWeight * 1.6) * 7) - overall[0].value)), 
+                    color: 'green'
+                  }
+                ]}
+                total={`${Math.round((currWeight * 1.6) * 7)} g`}
                 icon={<Activity className="h-5 w-5 text-blue-600" />}
-                chartTitle={'Goal'}
-            />
+                chartTitle={'Weekly Goal'}
+              />
+            </div>
             
-     
-        </div>
-        
-        <div className="mt-5 mb-5 w-[90%]">
-          <ActivitySummaryWeekly data={foodList} />
-        </div>
-      </div>
-      </>
-  ):(
-      <div className='flex flex-col items-center justify-center w-full h-full'>
-        <div className='flex flex-col items-center justify-center'>
-          <FolderOpenDotIcon className='h-10 w-10 text-gray-400' />
-          <p className='text-gray-500 text-sm font-[600] mt-2'>No data available</p>
-        </div>
-      </div>
-  )
-    }
+            <div className="mt-5 mb-5 w-[90%]">
+              <ActivitySummaryWeekly data={foodList} />
+            </div>
+          </div>
+        </>
+      ) : (
+        <EmptyState />
+      )}
     </div>
   );
 };

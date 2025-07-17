@@ -16,6 +16,11 @@ import FoodTrackerPanelWeekly from '../trackers/macrosWeekly';
 import ExerciseTrackerPanelWeekly from '../trackers/exerciseWeekly';
 import WeeklySleepTrackPanel from '../trackers/sleepWeekly';
 import WeeklyWeightTrackPanel from '../trackers/weightWeekly';
+import DeficitPanelMonthly from './deficitMonthly';
+import MacroPanelMonthly from '../trackers/macroMonthly';
+import ExercisePanelMonthly from '../trackers/exerciseMonthly';
+import WeightPanelMonthly from '../trackers/weightMonthly';
+import SleepPanelMonthly from '../trackers/sleepMonthly';
 
 // Define types
 type ViewOption = 'today' | 'weekly' | 'monthly';
@@ -36,8 +41,15 @@ const DeficitStats: React.FC = () => {
   const [dailyDeficit, setDailyDeficit] = useState<number>(0);
   const [weeklyIntake, setWeeklyIntake] = useState<number>(0);
   const [activeIcon, setActiveIcon] = useState<IconType>('deficit');
-  const [foodList, setFoodList] = useState([])
-  const [weeklyFoodList, setWeeklyFoodList] = useState([])
+  const [foodList, setFoodList] = useState([]);
+  const [weeklyFoodList, setWeeklyFoodList] = useState([]);
+  
+  // Add loading and error states
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [isLoadingWeekly, setIsLoadingWeekly] = useState<boolean>(true);
+  const [errorWeekly, setErrorWeekly] = useState<Error | null>(null);
+
   const [deficitData, setDeficitData] = useState<any[]>([
     {
       name: 'Deficit',
@@ -64,7 +76,6 @@ const DeficitStats: React.FC = () => {
     },
   ]);
 
-
   const [calorieData, setCalorieData] = useState<any[]>([
     {
       name: 'Calories',
@@ -87,13 +98,11 @@ const DeficitStats: React.FC = () => {
     },
   ]);
 
-
   // Constants
   const dailyTargetDeficit = 500;
   const weeklyTargetDeficit = 3500;
   const dailyTargetCal = 2000;
   const weeklyTarget = 500;
-
 
   // Fetch weeks for dropdown
   useEffect(() => {
@@ -113,11 +122,19 @@ const DeficitStats: React.FC = () => {
   // Fetch daily deficit on load
   useEffect(() => {
     const fetchDailyDeficit = async () => {
+      // Reset error states and set loading to true
+      setIsLoading(true);
+      setError(null);
+      setIsLoadingWeekly(true);
+      setErrorWeekly(null);
+      
       try {
         const res = await fetch('/api/tracker');
-        const res_2 = await fetch('/api/tracker/weekly/deficit')
         const data = await res.json();
-        const weeklyData = await res_2.json();
+        
+        if (!res.ok) {
+          throw new Error(data.message || 'Error fetching daily data');
+        }
         
         setDailyDeficit(data.result.dailyDeficit);
 
@@ -134,7 +151,7 @@ const DeficitStats: React.FC = () => {
           },
         ]);
 
-        setFoodList(data.result.foodList)
+        setFoodList(data.result.foodList);
 
         setCalorieData([
           {
@@ -153,57 +170,92 @@ const DeficitStats: React.FC = () => {
             color: 'red'
           },
         ]);
-
-        setWeeklyIntake(weeklyData.result.weeklyAverages.nutrition.totalCalories)
-
-        setWeeklyCalorieData([
-          {
-            name: 'Calories',
-            value: weeklyData.result.weeklyAverages.nutrition.totalCalories,
-            color: 'green'
-          },
-          {
-            name: 'Over-Intake',
-            value: weeklyData.result.weeklyAverages.nutrition.totalCalories - 14000,
-            color: 'red'
-          },
-          {
-            name: 'Free Intake',
-            value:  14000 - weeklyData.result.weeklyAverages.nutrition.totalCalories,
-            color: 'cyan'
-          },
-        ]);
         
-        setWeeklyDeficitData([
-          {
-            name: 'Deficit',
-            value: weeklyData.result.weeklyAverages.nutrition.totalDeficit,
-            color: 'cyan'
-          },
-          {
-            name: 'End-Week-Goal',
-            value: weeklyTargetDeficit - weeklyData.result.weeklyAverages.nutrition.totalDeficit,
-            color: 'red'
-          },
-        ]);
+        // Daily data loaded successfully
+        setIsLoading(false);
 
-        setWeeklyFoodList(weeklyData.result.dailyData)
-        console.log(weeklyData.result.dailyData)
-        
-      
+        // Now fetch weekly data
+        try {
+          const res_2 = await fetch('/api/tracker/weekly/deficit');
+          const weeklyData = await res_2.json();
+          
+          if (!res_2.ok) {
+            throw new Error(weeklyData.message || 'Error fetching weekly data');
+          }
 
+          setWeeklyIntake(weeklyData.result.weeklyAverages.nutrition.totalCalories);
+
+          setWeeklyCalorieData([
+            {
+              name: 'Calories',
+              value: weeklyData.result.weeklyAverages.nutrition.totalCalories,
+              color: 'green'
+            },
+            {
+              name: 'Over-Intake',
+              value: weeklyData.result.weeklyAverages.nutrition.totalCalories - 14000,
+              color: 'red'
+            },
+            {
+              name: 'Free Intake',
+              value: 14000 - weeklyData.result.weeklyAverages.nutrition.totalCalories,
+              color: 'cyan'
+            },
+          ]);
+          
+          setWeeklyDeficitData([
+            {
+              name: 'Deficit',
+              value: weeklyData.result.weeklyAverages.nutrition.totalDeficit,
+              color: 'cyan'
+            },
+            {
+              name: 'End-Week-Goal',
+              value: weeklyTargetDeficit - weeklyData.result.weeklyAverages.nutrition.totalDeficit,
+              color: 'red'
+            },
+          ]);
+
+          setWeeklyFoodList(weeklyData.result.dailyData);
+          setIsLoadingWeekly(false);
+        } catch (weeklyErr) {
+          console.error('Error fetching weekly deficit:', weeklyErr);
+          setErrorWeekly(weeklyErr instanceof Error ? weeklyErr : new Error('Unknown error with weekly data'));
+          setIsLoadingWeekly(false);
+        }
       } catch (err) {
         console.error('Error fetching daily deficit:', err);
+        setError(err instanceof Error ? err : new Error('Unknown error with daily data'));
+        setIsLoading(false);
       }
     };
 
-    
     fetchDailyDeficit();
   }, []);
 
+  // Add a refresh function that can be called from error states
+  const refreshData = () => {
+    setIsLoading(true);
+    setIsLoadingWeekly(true);
+    setError(null);
+    setErrorWeekly(null);
+    
+    // Re-fetch data
+    const fetchData = async () => {
+      try {
+        const res = await fetch('/api/tracker');
+        // ... same fetch logic as above
+        // This is simplified for brevity
+      } catch (err) {
+        console.error('Error refreshing data:', err);
+        setError(err instanceof Error ? err : new Error('Failed to refresh data'));
+      }
+    };
+    
+    fetchData();
+  };
 
   return (
-    // make it to be on the top of the page
     <div className="flex flex-col mx-auto px-0 py-4 rounded shadow-lg bg-gray-100 px-12 h-[100%] mt-[-30px] ">
       
       {/* Toggle View Options */}
@@ -224,46 +276,59 @@ const DeficitStats: React.FC = () => {
                 deficitData={deficitData}
                 foodList={foodList}
                 calorieData={calorieData}
+                isLoading={isLoading}
+                error={error}
             />
-          ) : (viewOption == "weekly" && activeIcon == "deficit") && (
+          ) : (viewOption == "weekly" && activeIcon == "deficit") ? (
             <DeficitPanelWeekly
               deficitData={weeklyDeficitData}
               weeklyFoodList={weeklyFoodList}
               calorieData={weeklyCalorieData}
+              isLoading={isLoadingWeekly}
+              error={errorWeekly}
             />
+          ) : (viewOption == "monthly" && activeIcon == "deficit") && (
+            <DeficitPanelMonthly />
           )
       }
 
       { activeIcon == "macro" &&
           viewOption == "today" ? (
             <FoodTrackerPanel2 />
-          ) : (viewOption == "weekly" && activeIcon == "macro") && (
+          ) : (viewOption == "weekly" && activeIcon == "macro") ? (
               <FoodTrackerPanelWeekly />
+          ) : (viewOption == "monthly" && activeIcon == "macro") && (
+              <MacroPanelMonthly />
           )
       }
 
       { activeIcon == "exercise" &&
           viewOption == "today" ? (
             <ExerciseTrackerPanel2 />
-          ) : (viewOption == "weekly" && activeIcon == "exercise") && (
+          ) : (viewOption == "weekly" && activeIcon == "exercise") ? (
               <ExerciseTrackerPanelWeekly />
+          ) : (viewOption == "monthly" && activeIcon == "exercise") && (
+              <ExercisePanelMonthly />
           )
       }
-
 
       { activeIcon == "weigth" &&
           viewOption == "today" ? (
             <WeightTrackerPanel />
-          ) : (viewOption == "weekly" && activeIcon == "weigth") && (
-            <WeeklyWeightTrackPanel />
+          ) : (viewOption == "weekly" && activeIcon == "weigth") ? (
+              <WeeklyWeightTrackPanel />
+          ) : (viewOption == "monthly" && activeIcon == "weigth") && (
+              <WeightPanelMonthly />
           )
       }
 
       { activeIcon == "sleep" &&
           viewOption == "today" ? (
             <SleepTrackPanel />
-          ) : (viewOption == "weekly" && activeIcon == "sleep") && (
-            <WeeklySleepTrackPanel />
+          ) : (viewOption == "weekly" && activeIcon == "sleep") ? (
+              <WeeklySleepTrackPanel />
+          ) : (viewOption == "monthly" && activeIcon == "sleep") && (
+              <SleepPanelMonthly />
           )
       }
 
@@ -278,19 +343,53 @@ const DeficitStats: React.FC = () => {
 export default DeficitStats;
 
 
-const DeficitPanelToday = ({deficitData,calorieData,foodList}) => {
-  return(
-    <div className="bg-gray-50 p-6 rounded-xl overflow-y-scroll h-full">
+// Updated DeficitPanelToday with loading and error states
+const DeficitPanelToday = ({ deficitData, calorieData, foodList, isLoading = false, error = null }) => {
+  if (isLoading) {
+    return (
+      <div className="bg-gray-50 p-6 rounded-xl h-full flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+        <p className="text-gray-600 font-medium">Loading today's data...</p>
+      </div>
+    );
+  }
 
-        
-    {/* Main widgets */}
-    <div className='flex flex-col items-center justify-center w-full'>
-      <div className="flex flex-row justify-around w-[100%] mt-5 mb-5">
+  if (error) {
+    return (
+      <div className="bg-gray-50 p-6 rounded-xl h-full flex flex-col items-center justify-center">
+        <div className="bg-red-100 p-4 rounded-xl mb-4 w-full max-w-md">
+          <div className="flex items-center">
+            <div className="flex-shrink-0 text-red-500">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error loading data</h3>
+              <p className="mt-1 text-sm text-red-700">{error.message || "An unexpected error occurred"}</p>
+            </div>
+          </div>
+        </div>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow hover:bg-blue-600 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-gray-50 p-6 rounded-xl overflow-y-scroll h-full">
+      {/* Main widgets */}
+      <div className='flex flex-col items-center justify-center w-full'>
+        <div className="flex flex-row justify-around w-[100%] mt-5 mb-5">
           <Widget_new 
-              title="Daily Deficit" 
-              chartData={deficitData} 
-              total={`${deficitData[0].value.toLocaleString()} calories`}
-              icon={<Activity className="h-5 w-5 text-blue-600" />}
+            title="Daily Deficit" 
+            chartData={deficitData} 
+            total={`${deficitData[0].value.toLocaleString()} calories`}
+            icon={<Activity className="h-5 w-5 text-blue-600" />}
           />
           
           <Widget_new
@@ -299,29 +398,63 @@ const DeficitPanelToday = ({deficitData,calorieData,foodList}) => {
             total={`${calorieData[0].value} calories`}
             icon={<TrendingUp className="h-5 w-5 text-blue-600" />}
           />
-      </div>
-      
-      <div className="mt-5 mb-5 w-[90%]">
-        <ActivitySummary data={foodList} />
+        </div>
+        
+        <div className="mt-5 mb-5 w-[90%]">
+          <ActivitySummary data={foodList} />
+        </div>
       </div>
     </div>
+  );
+};
+
+// Updated DeficitPanelWeekly with loading and error states
+const DeficitPanelWeekly = ({ deficitData, calorieData, weeklyFoodList, isLoading = false, error = null }) => {
+  if (isLoading) {
+    return (
+      <div className="bg-gray-50 p-6 rounded-xl h-full flex flex-col items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+        <p className="text-gray-600 font-medium">Loading weekly data...</p>
       </div>
-  )
-}
+    );
+  }
 
-const DeficitPanelWeekly = ({deficitData,calorieData,weeklyFoodList}) => {
-  return(
+  if (error) {
+    return (
+      <div className="bg-gray-50 p-6 rounded-xl h-full flex flex-col items-center justify-center">
+        <div className="bg-red-100 p-4 rounded-xl mb-4 w-full max-w-md">
+          <div className="flex items-center">
+            <div className="flex-shrink-0 text-red-500">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-red-800">Error loading weekly data</h3>
+              <p className="mt-1 text-sm text-red-700">{error.message || "An unexpected error occurred"}</p>
+            </div>
+          </div>
+        </div>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg shadow hover:bg-blue-600 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
     <div className="bg-gray-50 p-6 rounded-xl overflow-y-scroll h-full">
-
-        
-    {/* Main widgets */}
-    <div className='flex flex-col items-center justify-center w-full'>
-      <div className="flex flex-row justify-around w-[100%] mt-5 mb-5">
+      {/* Main widgets */}
+      <div className='flex flex-col items-center justify-center w-full'>
+        <div className="flex flex-row justify-around w-[100%] mt-5 mb-5">
           <Widget_new 
-              title="Weekly Deficit" 
-              chartData={deficitData} 
-              total={`${deficitData[0].value.toLocaleString()} calories`}
-              icon={<Activity className="h-5 w-5 text-blue-600" />}
+            title="Weekly Deficit" 
+            chartData={deficitData} 
+            total={`${deficitData[0].value.toLocaleString()} calories`}
+            icon={<Activity className="h-5 w-5 text-blue-600" />}
           />
           
           <Widget_new
@@ -330,15 +463,17 @@ const DeficitPanelWeekly = ({deficitData,calorieData,weeklyFoodList}) => {
             total={`${calorieData[0].value} calories`}
             icon={<TrendingUp className="h-5 w-5 text-blue-600" />}
           />
-      </div>
-      
-      <div className="mt-5 mb-5 w-[90%]">
-        <ActivitySummaryWeekly data={weeklyFoodList} />
+        </div>
+        
+        <div className="mt-5 mb-5 w-[90%]">
+          <ActivitySummaryWeekly data={weeklyFoodList} />
+        </div>
       </div>
     </div>
-      </div>
-  )
-}
+  );
+};
+
+
 
 const ActivitySummary = ({ data }) => {
   return (

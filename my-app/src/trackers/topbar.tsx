@@ -3,7 +3,6 @@ import DirectionsRunIcon from '@mui/icons-material/DirectionsRun';
 import PermMediaIcon from '@mui/icons-material/PermMedia';
 import AddReactionIcon from '@mui/icons-material/AddReaction';
 import HotelIcon from '@mui/icons-material/Hotel';
-import ExerciseTrackerPanel from '../trackers/exercise';
 import MacrosTrackerPanel from './macrosWeekly';
 import NoFoodIcon from '@mui/icons-material/NoFood';
 import MenuBookIcon from '@mui/icons-material/MenuBook';

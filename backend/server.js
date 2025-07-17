@@ -3426,6 +3426,1981 @@ app.get('/api/weekly/weight', async (req, res) => {
   }
 });
 
+function getImages(response) {
+  const images = [];
+  
+  // Process each page in the response
+  if (response.results && response.results.length > 0) {
+    response.results.forEach(page => {
+      // Extract the date - assuming there's a Date property
+      let date = '';
+      if (page.properties.Date && page.properties.Date.date && page.properties.Date.date.start) {
+        // Format: YYYY/MM/DD
+        const dateObj = new Date(page.properties.Date.date.start);
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        date = `${year}/${month}/${day}`;
+      } else {
+        // If no date is available, use the created time of the page
+        const createdTime = new Date(page.created_time);
+        const year = createdTime.getFullYear();
+        const month = String(createdTime.getMonth() + 1).padStart(2, '0');
+        const day = String(createdTime.getDate()).padStart(2, '0');
+        date = `${year}/${month}/${day}`;
+      }
+      
+      // Extract image URLs from the Image property
+      if (page.properties.Image && 
+          page.properties.Image.files && 
+          page.properties.Image.files.length > 0) {
+        
+        // Process each file in the Image property
+        page.properties.Image.files.forEach(file => {
+          // For external files
+          if (file.type === 'external' && file.external && file.external.url) {
+            images.push({
+              date,
+              image: file.external.url
+            });
+          } 
+          // For Notion-hosted files
+          else if (file.type === 'file' && file.file && file.file.url) {
+            images.push({
+              date,
+              image: file.file.url
+            });
+          }
+        });
+      } else {
+        // Include entries without images with null value
+        // This ensures all database entries are represented
+        images.push({
+          date,
+          image: null
+        });
+      }
+    });
+  }
+  
+  return images;
+}
+
+// Updated API endpoint
+app.get('/api/images', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // adjust if needed
+    });
+
+    const images = getImages(response);
+
+    res.json({ images });
+  } catch (err) {
+    console.error('Error fetching images:', err);
+    res.status(500).json({ error: 'Error fetching images' });
+  }
+});
+
+
+//[MONTHLY]
+
+/**
+ * GET /api/deficit/monthly
+ * Returns monthly deficit statistics
+ */
+app.get('/api/deficit/monthly', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // We might need to increase this if there are many entries per month
+    });
+
+    // Get current month and year
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-based
+
+    // Create a map to store monthly data (last 6 months)
+    const monthlyData = {};
+    
+    // Initialize data for the last 6 months
+    for (let i = 0; i < 6; i++) {
+      const month = new Date(currentYear, currentMonth - i, 1);
+      const year = month.getFullYear();
+      const monthIndex = month.getMonth();
+      const monthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(month);
+      const key = `${year}-${monthIndex + 1}`;
+      
+      monthlyData[key] = {
+        month: monthName,
+        year: year,
+        totalDeficit: 0,
+        totalCalories: 0,
+        avgDailyDeficit: 0,
+        avgDailyCalories: 0,
+        daysTracked: 0,
+        dailyData: []
+      };
+    }
+
+    // Process all entries
+    response.results.forEach((page) => {
+      const dayProp = page.properties['Day'];
+      
+      if (dayProp && Array.isArray(dayProp.title) && dayProp.title.length > 0) {
+        const dateStr = dayProp.title[0].plain_text;
+        
+        // Parse date in YYYY / MM / DD format
+        const dateParts = dateStr.split(' / ');
+        if (dateParts.length === 3) {
+          const year = parseInt(dateParts[0]);
+          const month = parseInt(dateParts[1]);
+          const day = parseInt(dateParts[2]);
+          
+          // Create a key for the month (YYYY-M format)
+          const monthKey = `${year}-${month}`;
+          
+          // Check if this month is within our 6-month window
+          if (monthlyData[monthKey]) {
+            // Extract deficit and calories
+            const deficit = page.properties['Deficit']?.number || 0;
+            const calories = page.properties['Calories']?.number || 0;
+            
+            // Add to monthly totals
+            monthlyData[monthKey].totalDeficit += deficit;
+            monthlyData[monthKey].totalCalories += calories;
+            monthlyData[monthKey].daysTracked += 1;
+            
+            // Add day data for detail view
+            monthlyData[monthKey].dailyData.push({
+              date: dateStr,
+              deficit: deficit,
+              calories: calories
+            });
+          }
+        }
+      }
+    });
+
+    // Calculate averages and sort daily data
+    Object.values(monthlyData).forEach(month => {
+      if (month.daysTracked > 0) {
+        month.avgDailyDeficit = Math.round(month.totalDeficit / month.daysTracked);
+        month.avgDailyCalories = Math.round(month.totalCalories / month.daysTracked);
+      }
+      
+      // Sort daily data by date
+      month.dailyData.sort((a, b) => {
+        return a.date.localeCompare(b.date);
+      });
+    });
+
+    // Convert to array and sort by most recent month first
+    const monthlyResults = Object.entries(monthlyData).map(([key, data]) => {
+      return {
+        monthKey: key,
+        ...data
+      };
+    }).sort((a, b) => {
+      return b.monthKey.localeCompare(a.monthKey);
+    });
+
+    // Calculate weight change for each month that has weight data
+    for (const month of monthlyResults) {
+      // Get all weight entries for the month
+      const weightEntries = [];
+      const dateRegex = new RegExp(`^${month.year} / ${month.monthKey.split('-')[1].padStart(2, '0')}`);
+      
+      // Find all weight entries for the month
+      response.results.forEach(page => {
+        const dayProp = page.properties['Day'];
+        if (dayProp && Array.isArray(dayProp.title) && dayProp.title.length > 0) {
+          const dateStr = dayProp.title[0].plain_text;
+          if (dateRegex.test(dateStr)) {
+            const weight = page.properties['Weight']?.number;
+            if (weight) {
+              weightEntries.push({
+                date: dateStr,
+                weight: weight
+              });
+            }
+          }
+        }
+      });
+      
+      // If we have at least 2 weight entries, calculate the change
+      if (weightEntries.length >= 2) {
+        // Sort by date
+        weightEntries.sort((a, b) => a.date.localeCompare(b.date));
+        
+        // Get first and last weight
+        const firstWeight = weightEntries[0].weight;
+        const lastWeight = weightEntries[weightEntries.length - 1].weight;
+        
+        month.weightChange = {
+          startWeight: firstWeight,
+          endWeight: lastWeight,
+          change: parseFloat((lastWeight - firstWeight).toFixed(1)),
+          percentChange: parseFloat((((lastWeight - firstWeight) / firstWeight) * 100).toFixed(1))
+        };
+      }
+    }
+
+    // Calculate projected weight loss based on deficit
+    for (const month of monthlyResults) {
+      if (month.totalDeficit > 0) {
+        // Estimate weight loss: ~7700 calorie deficit = 1 kg of fat loss
+        month.projectedFatLoss = parseFloat((month.totalDeficit / 7700).toFixed(2));
+        
+        // If we have actual weight change, calculate the difference
+        if (month.weightChange) {
+          month.deficitAccuracy = {
+            expected: month.projectedFatLoss,
+            actual: -month.weightChange.change, // Negate because deficit should lead to weight loss
+            difference: parseFloat(((-month.weightChange.change) - month.projectedFatLoss).toFixed(2))
+          };
+        }
+      }
+    }
+
+    res.json({ 
+      months: monthlyResults,
+      summary: {
+        totalMonthsTracked: monthlyResults.filter(m => m.daysTracked > 0).length,
+        sixMonthDeficit: monthlyResults.reduce((sum, month) => sum + month.totalDeficit, 0),
+        sixMonthAvgDailyDeficit: Math.round(
+          monthlyResults.reduce((sum, month) => sum + (month.daysTracked * month.avgDailyDeficit), 0) / 
+          monthlyResults.reduce((sum, month) => sum + month.daysTracked, 0)
+        ),
+        sixMonthProjectedFatLoss: parseFloat((monthlyResults.reduce((sum, month) => sum + (month.projectedFatLoss || 0), 0)).toFixed(2))
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching monthly deficit data:', err);
+    res.status(500).json({ error: 'Error fetching monthly deficit data: ' + err.message });
+  }
+});
+
+/**
+ * GET /api/macro/monthly
+ * Returns monthly macronutrient statistics
+ */
+app.get('/api/macro/monthly', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // Might need adjustment for larger datasets
+    });
+
+    const foodResponse = await notion.databases.query({
+      database_id: foodDatabaseId, 
+      page_size: 100,
+    });
+
+    // Get current month and year
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-based
+
+    // Create a map to store monthly data (last 6 months)
+    const monthlyData = {};
+    
+    // Initialize data for the last 6 months
+    for (let i = 0; i < 6; i++) {
+      const month = new Date(currentYear, currentMonth - i, 1);
+      const year = month.getFullYear();
+      const monthIndex = month.getMonth();
+      const monthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(month);
+      const key = `${year}-${monthIndex + 1}`;
+      
+      monthlyData[key] = {
+        month: monthName,
+        year: year,
+        // Macro totals
+        totalProtein: 0,
+        totalCarbs: 0,
+        totalFat: 0,
+        totalCalories: 0,
+        
+        // Averages
+        avgDailyProtein: 0,
+        avgDailyCarbs: 0,
+        avgDailyFat: 0,
+        avgDailyCalories: 0,
+        
+        // Tracking stats
+        daysTracked: 0,
+        daysWithCompleteMacros: 0,
+        
+        // Weight tracking
+        startWeight: null,
+        endWeight: null,
+        weightChange: null,
+        
+        // Food diversity stats
+        uniqueFoods: new Set(),
+        topFoods: [],
+        
+        // For daily breakdown
+        dailyData: []
+      };
+    }
+
+    // Process all entries to get day-by-day macros
+    response.results.forEach((page) => {
+      const dayProp = page.properties['Day'];
+      
+      if (dayProp && Array.isArray(dayProp.title) && dayProp.title.length > 0) {
+        const dateStr = dayProp.title[0].plain_text;
+        
+        // Parse date in YYYY / MM / DD format
+        const dateParts = dateStr.split(' / ');
+        if (dateParts.length === 3) {
+          const year = parseInt(dateParts[0]);
+          const month = parseInt(dateParts[1]);
+          const day = parseInt(dateParts[2]);
+          
+          // Create a key for the month (YYYY-M format)
+          const monthKey = `${year}-${month}`;
+          
+          // Check if this month is within our 6-month window
+          if (monthlyData[monthKey]) {
+            // Extract macros
+            const protein = page.properties['Protein']?.number || 0;
+            const carbs = page.properties['Carbs']?.number || 0;
+            const fat = page.properties['Fats']?.number || 0;
+            const calories = page.properties['Calories']?.number || 0;
+            const weight = page.properties['Weight']?.number || null;
+            
+            // Add to monthly totals
+            monthlyData[monthKey].totalProtein += protein;
+            monthlyData[monthKey].totalCarbs += carbs;
+            monthlyData[monthKey].totalFat += fat;
+            monthlyData[monthKey].totalCalories += calories;
+            monthlyData[monthKey].daysTracked += 1;
+            
+            // Track if day had complete macro data
+            if (protein > 0 && carbs > 0 && fat > 0) {
+              monthlyData[monthKey].daysWithCompleteMacros += 1;
+            }
+            
+            // Track weight if available
+            if (weight) {
+              if (monthlyData[monthKey].startWeight === null || 
+                  new Date(`${year}-${month}-${day}`) < new Date(`${year}-${month}-${monthlyData[monthKey].startWeightDay}`)) {
+                monthlyData[monthKey].startWeight = weight;
+                monthlyData[monthKey].startWeightDay = day;
+              }
+              
+              if (monthlyData[monthKey].endWeight === null || 
+                  new Date(`${year}-${month}-${day}`) > new Date(`${year}-${month}-${monthlyData[monthKey].endWeightDay}`)) {
+                monthlyData[monthKey].endWeight = weight;
+                monthlyData[monthKey].endWeightDay = day;
+              }
+            }
+            
+            // Add daily data point
+            monthlyData[monthKey].dailyData.push({
+              date: dateStr,
+              protein,
+              carbs,
+              fat,
+              calories,
+              weight
+            });
+          }
+        }
+      }
+    });
+
+    // Process food data to get food diversity stats
+    foodResponse.results.forEach((page) => {
+      const dateAddedProp = page.properties['Date Added'];
+      
+      if (dateAddedProp && dateAddedProp.rich_text && dateAddedProp.rich_text.length > 0) {
+        const dateStr = dateAddedProp.rich_text[0].plain_text;
+        
+        // Parse date in YYYY / MM / DD format
+        const dateParts = dateStr.split(' / ');
+        if (dateParts.length === 3) {
+          const year = parseInt(dateParts[0]);
+          const month = parseInt(dateParts[1]);
+          
+          // Create a key for the month (YYYY-M format)
+          const monthKey = `${year}-${month}`;
+          
+          // Check if this month is within our window
+          if (monthlyData[monthKey]) {
+            // Extract food name
+            const foodName = page.properties['Name']?.title?.[0]?.plain_text || 'Unknown Food';
+            const calories = page.properties['Calories']?.number || 0;
+            const protein = page.properties['Protein']?.number || 0;
+            
+            // Add to unique foods for the month
+            monthlyData[monthKey].uniqueFoods.add(foodName);
+            
+            // Keep track of this food for top foods calculation
+            if (!monthlyData[monthKey].foodCounts) {
+              monthlyData[monthKey].foodCounts = {};
+            }
+            
+            if (!monthlyData[monthKey].foodCounts[foodName]) {
+              monthlyData[monthKey].foodCounts[foodName] = {
+                count: 0,
+                calories: 0,
+                protein: 0
+              };
+            }
+            
+            monthlyData[monthKey].foodCounts[foodName].count += 1;
+            monthlyData[monthKey].foodCounts[foodName].calories += calories;
+            monthlyData[monthKey].foodCounts[foodName].protein += protein;
+          }
+        }
+      }
+    });
+
+    // Calculate averages and finalize data
+    Object.values(monthlyData).forEach(month => {
+      if (month.daysTracked > 0) {
+        // Calculate daily averages
+        month.avgDailyProtein = Math.round(month.totalProtein / month.daysTracked);
+        month.avgDailyCarbs = Math.round(month.totalCarbs / month.daysTracked);
+        month.avgDailyFat = Math.round(month.totalFat / month.daysTracked);
+        month.avgDailyCalories = Math.round(month.totalCalories / month.daysTracked);
+        
+        // Calculate macro ratios (percentages)
+        const totalCalsFromMacros = month.avgDailyProtein * 4 + month.avgDailyCarbs * 4 + month.avgDailyFat * 9;
+        
+        if (totalCalsFromMacros > 0) {
+          month.proteinPercentage = Math.round((month.avgDailyProtein * 4 / totalCalsFromMacros) * 100);
+          month.carbsPercentage = Math.round((month.avgDailyCarbs * 4 / totalCalsFromMacros) * 100);
+          month.fatPercentage = Math.round((month.avgDailyFat * 9 / totalCalsFromMacros) * 100);
+        }
+      }
+      
+      // Calculate weight change if we have both start and end weights
+      if (month.startWeight !== null && month.endWeight !== null) {
+        month.weightChange = {
+          change: parseFloat((month.endWeight - month.startWeight).toFixed(1)),
+          percentChange: parseFloat((((month.endWeight - month.startWeight) / month.startWeight) * 100).toFixed(1))
+        };
+      }
+      
+      // Sort daily data chronologically
+      month.dailyData.sort((a, b) => {
+        return a.date.localeCompare(b.date);
+      });
+      
+      // Calculate top foods
+      if (month.foodCounts) {
+        month.topFoods = Object.entries(month.foodCounts)
+          .map(([name, stats]) => ({
+            name,
+            count: stats.count,
+            totalCalories: stats.calories,
+            totalProtein: stats.protein
+          }))
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+      }
+      
+      // Convert food set to count
+      month.uniqueFoodCount = month.uniqueFoods.size;
+      delete month.uniqueFoods; // Remove the Set to make the response JSON-serializable
+      delete month.foodCounts; // Remove the raw food counts
+    });
+
+    // Convert to array and sort by most recent month first
+    const monthlyResults = Object.entries(monthlyData).map(([key, data]) => {
+      return {
+        monthKey: key,
+        ...data
+      };
+    }).sort((a, b) => {
+      return b.monthKey.localeCompare(a.monthKey);
+    });
+
+    // Calculate 6-month summary metrics
+    const sixMonthSummary = {
+      avgDailyProtein: Math.round(
+        monthlyResults.reduce((sum, month) => sum + (month.daysTracked * month.avgDailyProtein), 0) / 
+        monthlyResults.reduce((sum, month) => sum + month.daysTracked, 0)
+      ),
+      avgDailyCarbs: Math.round(
+        monthlyResults.reduce((sum, month) => sum + (month.daysTracked * month.avgDailyCarbs), 0) / 
+        monthlyResults.reduce((sum, month) => sum + month.daysTracked, 0)
+      ),
+      avgDailyFat: Math.round(
+        monthlyResults.reduce((sum, month) => sum + (month.daysTracked * month.avgDailyFat), 0) / 
+        monthlyResults.reduce((sum, month) => sum + month.daysTracked, 0)
+      ),
+      avgDailyCalories: Math.round(
+        monthlyResults.reduce((sum, month) => sum + (month.daysTracked * month.avgDailyCalories), 0) / 
+        monthlyResults.reduce((sum, month) => sum + month.daysTracked, 0)
+      ),
+      
+      // Adherence metrics
+      totalDaysTracked: monthlyResults.reduce((sum, month) => sum + month.daysTracked, 0),
+      daysWithCompleteMacros: monthlyResults.reduce((sum, month) => sum + month.daysWithCompleteMacros, 0),
+      
+      // Weight change over 6 months
+      totalWeightChange: (() => {
+        const firstMonth = monthlyResults[monthlyResults.length - 1];
+        const lastMonth = monthlyResults[0];
+        
+        if (firstMonth && lastMonth && firstMonth.startWeight && lastMonth.endWeight) {
+          return {
+            change: parseFloat((lastMonth.endWeight - firstMonth.startWeight).toFixed(1)),
+            percentChange: parseFloat((((lastMonth.endWeight - firstMonth.startWeight) / firstMonth.startWeight) * 100).toFixed(1))
+          };
+        }
+        return null;
+      })(),
+      
+      // Food diversity
+      uniqueFoodsAcrossMonths: (() => {
+        const allFoodNames = new Set();
+        monthlyResults.forEach(month => {
+          if (month.topFoods) {
+            month.topFoods.forEach(food => {
+              allFoodNames.add(food.name);
+            });
+          }
+        });
+        return allFoodNames.size;
+      })()
+    };
+    
+    // Calculate macro ratios for 6-month summary
+    const totalCalsFromMacros = sixMonthSummary.avgDailyProtein * 4 + 
+                              sixMonthSummary.avgDailyCarbs * 4 + 
+                              sixMonthSummary.avgDailyFat * 9;
+    
+    if (totalCalsFromMacros > 0) {
+      sixMonthSummary.proteinPercentage = Math.round((sixMonthSummary.avgDailyProtein * 4 / totalCalsFromMacros) * 100);
+      sixMonthSummary.carbsPercentage = Math.round((sixMonthSummary.avgDailyCarbs * 4 / totalCalsFromMacros) * 100);
+      sixMonthSummary.fatPercentage = Math.round((sixMonthSummary.avgDailyFat * 9 / totalCalsFromMacros) * 100);
+    }
+    
+    // Adherence rate as percentage
+    if (sixMonthSummary.totalDaysTracked > 0) {
+      sixMonthSummary.macroAdherenceRate = Math.round(
+        (sixMonthSummary.daysWithCompleteMacros / sixMonthSummary.totalDaysTracked) * 100
+      );
+    }
+
+    res.json({ 
+      months: monthlyResults,
+      summary: sixMonthSummary
+    });
+  } catch (err) {
+    console.error('Error fetching monthly macro data:', err);
+    res.status(500).json({ error: 'Error fetching monthly macro data: ' + err.message });
+  }
+});
+
+/**
+ * GET /api/exercise/monthly
+ * Returns monthly exercise statistics
+ */
+app.get('/api/exercise/monthly', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // Might need adjustment for larger datasets
+    });
+
+    // Get current month and year
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-based
+
+    // Create a map to store monthly data (last 6 months)
+    const monthlyData = {};
+    
+    // Initialize data for the last 6 months
+    for (let i = 0; i < 6; i++) {
+      const month = new Date(currentYear, currentMonth - i, 1);
+      const year = month.getFullYear();
+      const monthIndex = month.getMonth();
+      const monthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(month);
+      const key = `${year}-${monthIndex + 1}`;
+      
+      monthlyData[key] = {
+        month: monthName,
+        year: year,
+        
+        // General stats
+        daysTracked: 0,
+        activeDays: 0,
+        restDays: 0,
+        
+        // Step stats
+        totalSteps: 0,
+        avgDailySteps: 0,
+        
+        // Calorie burn stats
+        totalKcalBurned: 0,
+        avgDailyKcalBurned: 0,
+        
+        // Cardio stats
+        zone2: {
+          totalMinutes: 0,
+          totalDistance: 0,
+          sessionsCount: 0,
+          avgPace: null
+        },
+        cycling: {
+          totalMinutes: 0,
+          totalDistance: 0,
+          sessionsCount: 0,
+          avgSpeed: null
+        },
+        vo2Max: [],
+        
+        // Strength training stats
+        gym: {
+          totalMinutes: 0,
+          sessionsCount: 0,
+          workoutTypes: {} // e.g., { "Push": 3, "Pull": 2, "Legs": 3 }
+        },
+        
+        // Calendar view data
+        dailyExerciseData: []
+      };
+    }
+
+    // Process all entries
+    response.results.forEach((page) => {
+      const dayProp = page.properties['Day'];
+      
+      if (dayProp && Array.isArray(dayProp.title) && dayProp.title.length > 0) {
+        const dateStr = dayProp.title[0].plain_text;
+        
+        // Parse date in YYYY / MM / DD format
+        const dateParts = dateStr.split(' / ');
+        if (dateParts.length === 3) {
+          const year = parseInt(dateParts[0]);
+          const month = parseInt(dateParts[1]);
+          const day = parseInt(dateParts[2]);
+          
+          // Create a key for the month (YYYY-M format)
+          const monthKey = `${year}-${month}`;
+          
+          // Check if this month is within our 6-month window
+          if (monthlyData[monthKey]) {
+            // Extract exercise data
+            const steps = page.properties['Steps']?.number || 0;
+            const kcalFromMovement = page.properties['Kcal From Movement']?.number || 0;
+            
+            // Zone 2 data
+            const zone2Duration = page.properties['Zone2 Duration']?.number || 0;
+            const zone2Distance = page.properties['Zone2 Distance']?.number || 0;
+            
+            // Cycling data
+            const cyclingDuration = page.properties['Cycling Duration']?.number || 0;
+            const cyclingDistance = page.properties['Cycling Distance']?.number || 0;
+            
+            // Gym data
+            const gymDuration = page.properties['Gym Duration']?.number || 0;
+            let workoutType = null;
+            if (page.properties['Workout Type']?.select?.name) {
+              workoutType = page.properties['Workout Type'].select.name;
+            }
+            
+            // VO2Max (if available)
+            const vo2Max = page.properties['VO2Max']?.number || null;
+            
+            // Determine if this was an active day
+            const isActiveDay = steps > 0 || zone2Duration > 0 || cyclingDuration > 0 || gymDuration > 0 || kcalFromMovement > 0;
+            
+            // Update monthly counters
+            monthlyData[monthKey].daysTracked += 1;
+            if (isActiveDay) {
+              monthlyData[monthKey].activeDays += 1;
+            } else {
+              monthlyData[monthKey].restDays += 1;
+            }
+            
+            // Update steps and calories
+            monthlyData[monthKey].totalSteps += steps;
+            monthlyData[monthKey].totalKcalBurned += kcalFromMovement;
+            
+            // Update Zone 2 data
+            if (zone2Duration > 0) {
+              monthlyData[monthKey].zone2.totalMinutes += zone2Duration;
+              monthlyData[monthKey].zone2.totalDistance += zone2Distance;
+              monthlyData[monthKey].zone2.sessionsCount += 1;
+            }
+            
+            // Update cycling data
+            if (cyclingDuration > 0) {
+              monthlyData[monthKey].cycling.totalMinutes += cyclingDuration;
+              monthlyData[monthKey].cycling.totalDistance += cyclingDistance;
+              monthlyData[monthKey].cycling.sessionsCount += 1;
+            }
+            
+            // Update gym data
+            if (gymDuration > 0) {
+              monthlyData[monthKey].gym.totalMinutes += gymDuration;
+              monthlyData[monthKey].gym.sessionsCount += 1;
+              
+              // Track workout types
+              if (workoutType) {
+                if (!monthlyData[monthKey].gym.workoutTypes[workoutType]) {
+                  monthlyData[monthKey].gym.workoutTypes[workoutType] = 0;
+                }
+                monthlyData[monthKey].gym.workoutTypes[workoutType] += 1;
+              }
+            }
+            
+            // Track VO2Max readings
+            if (vo2Max) {
+              monthlyData[monthKey].vo2Max.push({
+                date: dateStr,
+                value: vo2Max
+              });
+            }
+            
+            // Add to daily exercise data for calendar view
+            monthlyData[monthKey].dailyExerciseData.push({
+              date: dateStr,
+              steps,
+              kcalBurned: kcalFromMovement,
+              hasCardio: zone2Duration > 0 || cyclingDuration > 0,
+              hasStrength: gymDuration > 0,
+              zone2: {
+                minutes: zone2Duration,
+                distance: zone2Distance,
+                pace: zone2Distance > 0 && zone2Duration > 0 ? zone2Duration / zone2Distance : null
+              },
+              cycling: {
+                minutes: cyclingDuration,
+                distance: cyclingDistance,
+                speed: cyclingDistance > 0 && cyclingDuration > 0 ? (cyclingDistance / (cyclingDuration / 60)) : null
+              },
+              strength: {
+                minutes: gymDuration,
+                workoutType
+              },
+              vo2Max,
+              isRestDay: !isActiveDay
+            });
+          }
+        }
+      }
+    });
+
+    // Calculate averages and additional metrics
+    Object.values(monthlyData).forEach(month => {
+      // Skip if no days tracked
+      if (month.daysTracked === 0) return;
+      
+      // Calculate averages
+      month.avgDailySteps = Math.round(month.totalSteps / month.daysTracked);
+      month.avgDailyKcalBurned = Math.round(month.totalKcalBurned / month.daysTracked);
+      
+      // Calculate active day averages
+      if (month.activeDays > 0) {
+        month.activeDay = {
+          avgSteps: Math.round(month.totalSteps / month.activeDays),
+          avgKcalBurned: Math.round(month.totalKcalBurned / month.activeDays)
+        };
+      }
+      
+      // Calculate Zone 2 averages
+      if (month.zone2.sessionsCount > 0) {
+        month.zone2.avgSessionDuration = Math.round(month.zone2.totalMinutes / month.zone2.sessionsCount);
+        month.zone2.avgSessionDistance = parseFloat((month.zone2.totalDistance / month.zone2.sessionsCount).toFixed(2));
+        
+        // Calculate overall pace
+        if (month.zone2.totalDistance > 0) {
+          month.zone2.avgPace = parseFloat((month.zone2.totalMinutes / month.zone2.totalDistance).toFixed(2));
+        }
+      }
+      
+      // Calculate cycling averages
+      if (month.cycling.sessionsCount > 0) {
+        month.cycling.avgSessionDuration = Math.round(month.cycling.totalMinutes / month.cycling.sessionsCount);
+        month.cycling.avgSessionDistance = parseFloat((month.cycling.totalDistance / month.cycling.sessionsCount).toFixed(2));
+        
+        // Calculate overall speed
+        if (month.cycling.totalMinutes > 0) {
+          month.cycling.avgSpeed = parseFloat(((month.cycling.totalDistance / month.cycling.totalMinutes) * 60).toFixed(2));
+        }
+      }
+      
+      // Calculate gym averages
+      if (month.gym.sessionsCount > 0) {
+        month.gym.avgSessionDuration = Math.round(month.gym.totalMinutes / month.gym.sessionsCount);
+        
+        // Calculate most common workout type
+        let maxCount = 0;
+        let mostCommonType = null;
+        
+        for (const [type, count] of Object.entries(month.gym.workoutTypes)) {
+          if (count > maxCount) {
+            maxCount = count;
+            mostCommonType = type;
+          }
+        }
+        
+        month.gym.mostCommonWorkout = mostCommonType;
+      }
+      
+      // Sort daily data chronologically
+      month.dailyExerciseData.sort((a, b) => {
+        return a.date.localeCompare(b.date);
+      });
+      
+      // Sort and get latest VO2Max
+      if (month.vo2Max.length > 0) {
+        month.vo2Max.sort((a, b) => a.date.localeCompare(b.date));
+        month.latestVO2Max = month.vo2Max[month.vo2Max.length - 1].value;
+      }
+      
+      // Calculate active days percentage
+      month.activeDaysPercentage = Math.round((month.activeDays / month.daysTracked) * 100);
+    });
+
+    // Convert to array and sort by most recent month first
+    const monthlyResults = Object.entries(monthlyData).map(([key, data]) => {
+      return {
+        monthKey: key,
+        ...data
+      };
+    }).sort((a, b) => {
+      return b.monthKey.localeCompare(a.monthKey);
+    });
+
+    // Calculate 6-month summary
+    const sixMonthSummary = {
+      // Overall stats
+      totalDaysTracked: monthlyResults.reduce((sum, month) => sum + month.daysTracked, 0),
+      totalActiveDays: monthlyResults.reduce((sum, month) => sum + month.activeDays, 0),
+      totalRestDays: monthlyResults.reduce((sum, month) => sum + month.restDays, 0),
+      
+      // Overall exercise volumes
+      totalSteps: monthlyResults.reduce((sum, month) => sum + month.totalSteps, 0),
+      totalKcalBurned: monthlyResults.reduce((sum, month) => sum + month.totalKcalBurned, 0),
+      totalZone2Minutes: monthlyResults.reduce((sum, month) => sum + month.zone2.totalMinutes, 0),
+      totalZone2Distance: monthlyResults.reduce((sum, month) => sum + month.zone2.totalDistance, 0),
+      totalCyclingMinutes: monthlyResults.reduce((sum, month) => sum + month.cycling.totalMinutes, 0),
+      totalCyclingDistance: monthlyResults.reduce((sum, month) => sum + month.cycling.totalDistance, 0),
+      totalGymMinutes: monthlyResults.reduce((sum, month) => sum + month.gym.totalMinutes, 0),
+      
+      // Session counts
+      totalZone2Sessions: monthlyResults.reduce((sum, month) => sum + month.zone2.sessionsCount, 0),
+      totalCyclingSessions: monthlyResults.reduce((sum, month) => sum + month.cycling.sessionsCount, 0),
+      totalGymSessions: monthlyResults.reduce((sum, month) => sum + month.gym.sessionsCount, 0),
+      
+      // Averages across the entire period
+      avgDailySteps: 0,
+      avgDailyKcalBurned: 0,
+      activeDayPercentage: 0,
+      
+      // VO2Max trend
+      vo2MaxTrend: []
+    };
+    
+    // Calculate total days tracked across all months
+    const totalDaysTracked = sixMonthSummary.totalDaysTracked;
+    
+    if (totalDaysTracked > 0) {
+      // Calculate averages
+      sixMonthSummary.avgDailySteps = Math.round(sixMonthSummary.totalSteps / totalDaysTracked);
+      sixMonthSummary.avgDailyKcalBurned = Math.round(sixMonthSummary.totalKcalBurned / totalDaysTracked);
+      sixMonthSummary.activeDayPercentage = Math.round((sixMonthSummary.totalActiveDays / totalDaysTracked) * 100);
+    }
+    
+    // Get VO2Max trend - collect the latest reading from each month
+    sixMonthSummary.vo2MaxTrend = monthlyResults
+      .filter(month => month.latestVO2Max)
+      .map(month => ({
+        month: month.month.substring(0, 3),
+        year: month.year,
+        value: month.latestVO2Max
+      }))
+      .sort((a, b) => {
+        // Sort by year and month
+        if (a.year !== b.year) return a.year - b.year;
+        return monthlyResults.findIndex(m => m.month.substring(0, 3) === a.month) - 
+               monthlyResults.findIndex(m => m.month.substring(0, 3) === b.month);
+      });
+    
+    // Collect workout type distribution across all months
+    const allWorkoutTypes = {};
+    monthlyResults.forEach(month => {
+      Object.entries(month.gym.workoutTypes || {}).forEach(([type, count]) => {
+        if (!allWorkoutTypes[type]) {
+          allWorkoutTypes[type] = 0;
+        }
+        allWorkoutTypes[type] += count;
+      });
+    });
+    
+    sixMonthSummary.workoutTypeDistribution = allWorkoutTypes;
+    
+    // Find the most common workout type
+    let maxCount = 0;
+    let mostCommonType = null;
+    
+    for (const [type, count] of Object.entries(allWorkoutTypes)) {
+      if (count > maxCount) {
+        maxCount = count;
+        mostCommonType = type;
+      }
+    }
+    
+    sixMonthSummary.mostCommonWorkout = mostCommonType;
+    
+    // Calculate trends (month-over-month changes)
+    if (monthlyResults.length >= 2) {
+      // Get the two most recent months with data
+      const recentMonths = monthlyResults
+        .filter(month => month.daysTracked > 0)
+        .slice(0, 2);
+      
+      if (recentMonths.length === 2) {
+        const current = recentMonths[0];
+        const previous = recentMonths[1];
+        
+        sixMonthSummary.trends = {
+          steps: {
+            value: current.avgDailySteps - previous.avgDailySteps,
+            percentage: previous.avgDailySteps > 0 
+              ? Math.round(((current.avgDailySteps - previous.avgDailySteps) / previous.avgDailySteps) * 100) 
+              : 0
+          },
+          kcalBurned: {
+            value: current.avgDailyKcalBurned - previous.avgDailyKcalBurned,
+            percentage: previous.avgDailyKcalBurned > 0 
+              ? Math.round(((current.avgDailyKcalBurned - previous.avgDailyKcalBurned) / previous.avgDailyKcalBurned) * 100) 
+              : 0
+          },
+          activeDays: {
+            value: current.activeDaysPercentage - previous.activeDaysPercentage,
+            percentage: previous.activeDaysPercentage > 0
+              ? Math.round(((current.activeDaysPercentage - previous.activeDaysPercentage) / previous.activeDaysPercentage) * 100)
+              : 0
+          }
+        };
+      }
+    }
+
+    res.json({ 
+      months: monthlyResults,
+      summary: sixMonthSummary
+    });
+  } catch (err) {
+    console.error('Error fetching monthly exercise data:', err);
+    res.status(500).json({ error: 'Error fetching monthly exercise data: ' + err.message });
+  }
+});
+
+/**
+ * GET /api/weight/monthly
+ * Returns monthly weight statistics and trends
+ */
+app.get('/api/weight/monthly', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // Might need adjustment for larger datasets
+    });
+
+    // Get current month and year
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-based
+
+    // Create a map to store monthly data (last 6 months)
+    const monthlyData = {};
+    
+    // Initialize data for the last 6 months
+    for (let i = 0; i < 6; i++) {
+      const month = new Date(currentYear, currentMonth - i, 1);
+      const year = month.getFullYear();
+      const monthIndex = month.getMonth();
+      const monthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(month);
+      const key = `${year}-${monthIndex + 1}`;
+      
+      monthlyData[key] = {
+        month: monthName,
+        year: year,
+        
+        // Weight stats
+        weightReadings: [],
+        avgWeight: null,
+        minWeight: null,
+        maxWeight: null,
+        startWeight: null,
+        endWeight: null,
+        weightChange: null,
+        
+        // Tracking stats
+        daysTracked: 0,
+        daysWithWeight: 0,
+        weightTrackingRate: 0,
+        
+        // Health condition correlations
+        conditions: {
+          bloatedDays: 0,
+          poopDays: 0,
+          wateryDays: 0,
+          badSleepDays: 0
+        },
+        
+        // Nutrition correlations
+        nutrition: {
+          avgDailyCalories: 0,
+          avgDailyProtein: 0,
+          avgDailyCarbs: 0,
+          avgDailyFat: 0,
+          totalDeficit: 0
+        },
+        
+        // Daily data for detailed analysis
+        dailyData: []
+      };
+    }
+
+    // Process all entries
+    response.results.forEach((page) => {
+      const dayProp = page.properties['Day'];
+      
+      if (dayProp && Array.isArray(dayProp.title) && dayProp.title.length > 0) {
+        const dateStr = dayProp.title[0].plain_text;
+        
+        // Parse date in YYYY / MM / DD format
+        const dateParts = dateStr.split(' / ');
+        if (dateParts.length === 3) {
+          const year = parseInt(dateParts[0]);
+          const month = parseInt(dateParts[1]);
+          const day = parseInt(dateParts[2]);
+          
+          // Create a key for the month (YYYY-M format)
+          const monthKey = `${year}-${month}`;
+          
+          // Check if this month is within our 6-month window
+          if (monthlyData[monthKey]) {
+            // Extract weight and health condition data
+            const weight = page.properties['Weight']?.number || null;
+            const bloated = page.properties['Bloated']?.checkbox || false;
+            const poop = page.properties['Poop']?.checkbox || false;
+            const watery = page.properties['Watery']?.checkbox || false;
+            const badSleep = page.properties['Bad Sleep']?.checkbox || false;
+            
+            // Extract nutrition data
+            const calories = page.properties['Calories']?.number || 0;
+            const protein = page.properties['Protein']?.number || 0;
+            const carbs = page.properties['Carbs']?.number || 0;
+            const fat = page.properties['Fats']?.number || 0;
+            const deficit = page.properties['Deficit']?.number || 0;
+            
+            // Increment tracking counts
+            monthlyData[monthKey].daysTracked += 1;
+            if (weight !== null) {
+              monthlyData[monthKey].daysWithWeight += 1;
+              monthlyData[monthKey].weightReadings.push({
+                date: dateStr,
+                weight,
+                conditions: {
+                  bloated,
+                  poop,
+                  watery,
+                  badSleep
+                }
+              });
+            }
+            
+            // Track health conditions
+            if (bloated) monthlyData[monthKey].conditions.bloatedDays += 1;
+            if (poop) monthlyData[monthKey].conditions.poopDays += 1;
+            if (watery) monthlyData[monthKey].conditions.wateryDays += 1;
+            if (badSleep) monthlyData[monthKey].conditions.badSleepDays += 1;
+            
+            // Track nutrition totals for later averaging
+            monthlyData[monthKey].nutrition.avgDailyCalories += calories;
+            monthlyData[monthKey].nutrition.avgDailyProtein += protein;
+            monthlyData[monthKey].nutrition.avgDailyCarbs += carbs;
+            monthlyData[monthKey].nutrition.avgDailyFat += fat;
+            monthlyData[monthKey].nutrition.totalDeficit += deficit;
+            
+            // Add to daily data for detailed analysis
+            monthlyData[monthKey].dailyData.push({
+              date: dateStr,
+              weight,
+              conditions: {
+                bloated,
+                poop,
+                watery,
+                badSleep
+              },
+              nutrition: {
+                calories,
+                protein,
+                carbs,
+                fat,
+                deficit
+              }
+            });
+          }
+        }
+      }
+    });
+
+    // Calculate statistics and correlations for each month
+    Object.values(monthlyData).forEach(month => {
+      // Sort weight readings chronologically
+      month.weightReadings.sort((a, b) => {
+        return a.date.localeCompare(b.date);
+      });
+      
+      // Calculate weight tracking rate
+      if (month.daysTracked > 0) {
+        month.weightTrackingRate = Math.round((month.daysWithWeight / month.daysTracked) * 100);
+      }
+      
+      // Calculate nutrition averages
+      if (month.daysTracked > 0) {
+        month.nutrition.avgDailyCalories = Math.round(month.nutrition.avgDailyCalories / month.daysTracked);
+        month.nutrition.avgDailyProtein = Math.round(month.nutrition.avgDailyProtein / month.daysTracked);
+        month.nutrition.avgDailyCarbs = Math.round(month.nutrition.avgDailyCarbs / month.daysTracked);
+        month.nutrition.avgDailyFat = Math.round(month.nutrition.avgDailyFat / month.daysTracked);
+      }
+      
+      // If we have weight readings, calculate weight statistics
+      if (month.weightReadings.length > 0) {
+        const weights = month.weightReadings.map(reading => reading.weight);
+        
+        // Calculate average weight
+        month.avgWeight = parseFloat((weights.reduce((sum, w) => sum + w, 0) / weights.length).toFixed(1));
+        
+        // Find min and max weight
+        month.minWeight = parseFloat(Math.min(...weights).toFixed(1));
+        month.maxWeight = parseFloat(Math.max(...weights).toFixed(1));
+        
+        // Get first and last weight readings
+        month.startWeight = month.weightReadings[0].weight;
+        month.endWeight = month.weightReadings[month.weightReadings.length - 1].weight;
+        
+        // Calculate weight change
+        const change = month.endWeight - month.startWeight;
+        month.weightChange = {
+          absolute: parseFloat(change.toFixed(1)),
+          percentage: parseFloat(((change / month.startWeight) * 100).toFixed(1))
+        };
+      }
+      
+      // Calculate correlations between weight and conditions
+      if (month.weightReadings.length > 0) {
+        const correlations = {};
+        
+        // Function to calculate average weight with and without a condition
+        const calculateConditionCorrelation = (conditionName) => {
+          const conditionReadings = month.weightReadings.filter(reading => reading.conditions[conditionName]);
+          const nonConditionReadings = month.weightReadings.filter(reading => !reading.conditions[conditionName]);
+          
+          if (conditionReadings.length > 0 && nonConditionReadings.length > 0) {
+            const avgWithCondition = conditionReadings.reduce((sum, r) => sum + r.weight, 0) / conditionReadings.length;
+            const avgWithoutCondition = nonConditionReadings.reduce((sum, r) => sum + r.weight, 0) / nonConditionReadings.length;
+            
+            return {
+              avgWithCondition: parseFloat(avgWithCondition.toFixed(1)),
+              avgWithoutCondition: parseFloat(avgWithoutCondition.toFixed(1)),
+              difference: parseFloat((avgWithCondition - avgWithoutCondition).toFixed(1))
+            };
+          }
+          
+          return null;
+        };
+        
+        // Calculate correlations for each condition
+        correlations.bloated = calculateConditionCorrelation('bloated');
+        correlations.poop = calculateConditionCorrelation('poop');
+        correlations.watery = calculateConditionCorrelation('watery');
+        correlations.badSleep = calculateConditionCorrelation('badSleep');
+        
+        month.conditionCorrelations = correlations;
+      }
+      
+      // Sort daily data chronologically
+      month.dailyData.sort((a, b) => {
+        return a.date.localeCompare(b.date);
+      });
+    });
+
+    // Convert to array and sort by most recent month first
+    const monthlyResults = Object.entries(monthlyData).map(([key, data]) => {
+      return {
+        monthKey: key,
+        ...data
+      };
+    }).sort((a, b) => {
+      return b.monthKey.localeCompare(a.monthKey);
+    });
+
+    // Calculate 6-month trends
+    const sixMonthSummary = {
+      // Overall weight change
+      totalWeightChange: null,
+      
+      // Average stats across all months
+      avgDailyCalories: 0,
+      avgDailyProtein: 0,
+      avgDeficit: 0,
+      
+      // Health condition correlations
+      conditionImpacts: {}
+    };
+    
+    // Calculate total weight change if we have readings in multiple months
+    const monthsWithWeight = monthlyResults.filter(month => month.weightReadings.length > 0);
+    if (monthsWithWeight.length >= 2) {
+      const earliestMonth = monthsWithWeight[monthsWithWeight.length - 1];
+      const latestMonth = monthsWithWeight[0];
+      
+      const startWeight = earliestMonth.weightReadings[0].weight;
+      const endWeight = latestMonth.weightReadings[latestMonth.weightReadings.length - 1].weight;
+      
+      const change = endWeight - startWeight;
+      
+      sixMonthSummary.totalWeightChange = {
+        startDate: earliestMonth.weightReadings[0].date,
+        endDate: latestMonth.weightReadings[latestMonth.weightReadings.length - 1].date,
+        startWeight,
+        endWeight,
+        change: parseFloat(change.toFixed(1)),
+        percentage: parseFloat(((change / startWeight) * 100).toFixed(1)),
+        averageMonthlyChange: parseFloat((change / monthsWithWeight.length).toFixed(1))
+      };
+    }
+    
+    // Calculate average nutrition across all months with data
+    const monthsWithData = monthlyResults.filter(month => month.daysTracked > 0);
+    if (monthsWithData.length > 0) {
+      let totalCalories = 0;
+      let totalProtein = 0;
+      let totalDeficit = 0;
+      let daysTracked = 0;
+      
+      monthsWithData.forEach(month => {
+        totalCalories += month.nutrition.avgDailyCalories * month.daysTracked;
+        totalProtein += month.nutrition.avgDailyProtein * month.daysTracked;
+        totalDeficit += month.nutrition.totalDeficit;
+        daysTracked += month.daysTracked;
+      });
+      
+      if (daysTracked > 0) {
+        sixMonthSummary.avgDailyCalories = Math.round(totalCalories / daysTracked);
+        sixMonthSummary.avgDailyProtein = Math.round(totalProtein / daysTracked);
+        sixMonthSummary.avgDailyDeficit = Math.round(totalDeficit / daysTracked);
+        sixMonthSummary.totalDeficit = totalDeficit;
+      }
+    }
+    
+    // Calculate overall condition impacts across all months
+    ['bloated', 'poop', 'watery', 'badSleep'].forEach(condition => {
+      const monthsWithCorrelation = monthlyResults
+        .filter(month => month.conditionCorrelations && month.conditionCorrelations[condition]);
+      
+      if (monthsWithCorrelation.length > 0) {
+        let totalDifference = 0;
+        
+        monthsWithCorrelation.forEach(month => {
+          totalDifference += month.conditionCorrelations[condition].difference;
+        });
+        
+        const avgDifference = totalDifference / monthsWithCorrelation.length;
+        
+        sixMonthSummary.conditionImpacts[condition] = {
+          averageDifference: parseFloat(avgDifference.toFixed(1)),
+          consistentDirection: monthsWithCorrelation.every(month => 
+            Math.sign(month.conditionCorrelations[condition].difference) === Math.sign(avgDifference)
+          )
+        };
+      }
+    });
+    
+    // Add deficit per kg of weight lost if we have both deficit and weight change
+    if (sixMonthSummary.totalWeightChange && 
+        sixMonthSummary.totalWeightChange.change !== 0 && 
+        sixMonthSummary.totalDeficit) {
+      if (sixMonthSummary.totalWeightChange.change < 0) {
+        // Weight loss
+        sixMonthSummary.deficitPerKgLost = Math.round(
+          sixMonthSummary.totalDeficit / Math.abs(sixMonthSummary.totalWeightChange.change)
+        );
+      } else {
+        // Weight gain
+        sixMonthSummary.surplusPerKgGained = Math.round(
+          -sixMonthSummary.totalDeficit / sixMonthSummary.totalWeightChange.change
+        );
+      }
+    }
+
+    res.json({ 
+      months: monthlyResults,
+      summary: sixMonthSummary
+    });
+  } catch (err) {
+    console.error('Error fetching monthly weight data:', err);
+    res.status(500).json({ error: 'Error fetching monthly weight data: ' + err.message });
+  }
+});
+
+/**
+ * GET /api/sleep/monthly
+ * Returns monthly sleep statistics and trends
+ */
+app.get('/api/sleep/monthly', async (req, res) => {
+  try {
+    const response = await notion.databases.query({
+      database_id: databaseId,
+      page_size: 100, // Might need adjustment for larger datasets
+    });
+
+    // Get current month and year
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-based
+
+    // Create a map to store monthly data (last 6 months)
+    const monthlyData = {};
+    
+    // Initialize data for the last 6 months
+    for (let i = 0; i < 6; i++) {
+      const month = new Date(currentYear, currentMonth - i, 1);
+      const year = month.getFullYear();
+      const monthIndex = month.getMonth();
+      const monthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(month);
+      const key = `${year}-${monthIndex + 1}`;
+      
+      monthlyData[key] = {
+        month: monthName,
+        year: year,
+        
+        // Sleep metrics
+        avgSleepDuration: null, // in minutes
+        totalSleepMinutes: 0,
+        daysWithSleepData: 0,
+        
+        // Bedtime consistency
+        avgBedTime: null, // in minutes from midnight
+        bedTimeDeviation: null, // standard deviation in minutes
+        bedTimes: [], // array of bedtimes in minutes from midnight
+        
+        // Wake time consistency
+        avgWakeTime: null, // in minutes from midnight
+        wakeTimeDeviation: null, // standard deviation in minutes
+        wakeTimes: [], // array of wake times in minutes from midnight
+        
+        // Sleep quality metrics
+        qualityDistribution: {
+          excellent: 0,
+          good: 0,
+          fair: 0, 
+          poor: 0
+        },
+        avgSleepScore: null,
+        
+        // Sleep health factors
+        badSleepDays: 0,
+        
+        // Day tracking metrics
+        daysTracked: 0,
+        daysWithCompleteTiming: 0,
+        daysWithQualityRating: 0,
+        
+        // Daily sleep data for detailed analysis
+        dailySleepData: []
+      };
+    }
+
+    // Function to parse time string in "HH:MM" format and return minutes since midnight
+    const parseTimeToMinutes = (timeString) => {
+      if (!timeString) return null;
+      
+      const [hours, minutes] = timeString.split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+    
+    // Function to calculate sleep duration in minutes from bed time and wake time
+    const calculateSleepDuration = (bedTimeMinutes, wakeTimeMinutes) => {
+      if (bedTimeMinutes === null || wakeTimeMinutes === null) return null;
+      
+      // Handle case where bedtime is later than wake time (sleeping past midnight)
+      if (bedTimeMinutes > wakeTimeMinutes) {
+        return (24 * 60 - bedTimeMinutes) + wakeTimeMinutes;
+      } else {
+        return wakeTimeMinutes - bedTimeMinutes;
+      }
+    };
+    
+    // Function to extract sleep window duration in minutes from a string like "8h 30m"
+    const parseSleepWindowToMinutes = (sleepWindowStr) => {
+      if (!sleepWindowStr) return null;
+      
+      let totalMinutes = 0;
+      
+      // Extract hours
+      const hoursMatch = sleepWindowStr.match(/(\d+)h/);
+      if (hoursMatch) {
+        totalMinutes += parseInt(hoursMatch[1]) * 60;
+      }
+      
+      // Extract minutes
+      const minutesMatch = sleepWindowStr.match(/(\d+)m/);
+      if (minutesMatch) {
+        totalMinutes += parseInt(minutesMatch[1]);
+      }
+      
+      return totalMinutes;
+    };
+
+    // Process all entries
+    response.results.forEach((page) => {
+      const dayProp = page.properties['Day'];
+      
+      if (dayProp && Array.isArray(dayProp.title) && dayProp.title.length > 0) {
+        const dateStr = dayProp.title[0].plain_text;
+        
+        // Parse date in YYYY / MM / DD format
+        const dateParts = dateStr.split(' / ');
+        if (dateParts.length === 3) {
+          const year = parseInt(dateParts[0]);
+          const month = parseInt(dateParts[1]);
+          const day = parseInt(dateParts[2]);
+          
+          // Create a key for the month (YYYY-M format)
+          const monthKey = `${year}-${month}`;
+          
+          // Check if this month is within our 6-month window
+          if (monthlyData[monthKey]) {
+            // Extract sleep data
+            let bedTime = null;
+            if (page.properties['Bed Time'] && 
+                page.properties['Bed Time'].rich_text && 
+                page.properties['Bed Time'].rich_text.length > 0) {
+              bedTime = page.properties['Bed Time'].rich_text[0].plain_text;
+            }
+            
+            let wakeTime = null;
+            if (page.properties['Wake Time'] && 
+                page.properties['Wake Time'].rich_text && 
+                page.properties['Wake Time'].rich_text.length > 0) {
+              wakeTime = page.properties['Wake Time'].rich_text[0].plain_text;
+            }
+            
+            let sleepQuality = null;
+            if (page.properties['Sleep Quality'] && 
+                page.properties['Sleep Quality'].select && 
+                page.properties['Sleep Quality'].select.name) {
+              sleepQuality = page.properties['Sleep Quality'].select.name.toLowerCase();
+            }
+            
+            let sleepWindow = null;
+            if (page.properties['Sleep Window'] && 
+                page.properties['Sleep Window'].rich_text && 
+                page.properties['Sleep Window'].rich_text.length > 0) {
+              sleepWindow = page.properties['Sleep Window'].rich_text[0].plain_text;
+            }
+            
+            const badSleep = page.properties['Bad Sleep']?.checkbox || false;
+            
+            // Increment day counters
+            monthlyData[monthKey].daysTracked += 1;
+            
+            // Convert times to minutes for calculations
+            const bedTimeMinutes = bedTime ? parseTimeToMinutes(bedTime) : null;
+            const wakeTimeMinutes = wakeTime ? parseTimeToMinutes(wakeTime) : null;
+            
+            // If we have both bed and wake time, calculate sleep duration
+            let sleepDurationMinutes = null;
+            
+            if (bedTimeMinutes !== null && wakeTimeMinutes !== null) {
+              sleepDurationMinutes = calculateSleepDuration(bedTimeMinutes, wakeTimeMinutes);
+              monthlyData[monthKey].daysWithCompleteTiming += 1;
+            } 
+            // If we have sleep window string, parse it
+            else if (sleepWindow) {
+              sleepDurationMinutes = parseSleepWindowToMinutes(sleepWindow);
+            }
+            
+            // Track sleep quality distribution
+            if (sleepQuality) {
+              monthlyData[monthKey].qualityDistribution[sleepQuality] = 
+                (monthlyData[monthKey].qualityDistribution[sleepQuality] || 0) + 1;
+              monthlyData[monthKey].daysWithQualityRating += 1;
+            }
+            
+            // Track bad sleep days
+            if (badSleep) {
+              monthlyData[monthKey].badSleepDays += 1;
+            }
+            
+            // If we have any sleep data, add to monthly totals
+            if (bedTime || wakeTime || sleepQuality || sleepWindow) {
+              monthlyData[monthKey].daysWithSleepData += 1;
+              
+              // Add sleep duration to total if available
+              if (sleepDurationMinutes) {
+                monthlyData[monthKey].totalSleepMinutes += sleepDurationMinutes;
+              }
+              
+              // Add to bedtime/waketime arrays for consistency calculations
+              if (bedTimeMinutes !== null) {
+                monthlyData[monthKey].bedTimes.push(bedTimeMinutes);
+              }
+              
+              if (wakeTimeMinutes !== null) {
+                monthlyData[monthKey].wakeTimes.push(wakeTimeMinutes);
+              }
+            }
+            
+            // Add to daily data array
+            monthlyData[monthKey].dailySleepData.push({
+              date: dateStr,
+              bedTime,
+              wakeTime,
+              bedTimeMinutes,
+              wakeTimeMinutes,
+              sleepDurationMinutes,
+              sleepQuality,
+              badSleep
+            });
+          }
+        }
+      }
+    });
+
+    // Calculate statistics for each month
+    Object.values(monthlyData).forEach(month => {
+      // Calculate average sleep duration
+      if (month.daysWithSleepData > 0 && month.totalSleepMinutes > 0) {
+        month.avgSleepDuration = Math.round(month.totalSleepMinutes / month.daysWithSleepData);
+      }
+      
+      // Calculate bedtime average and consistency
+      if (month.bedTimes.length > 0) {
+        // Calculate average bedtime
+        const avgBedTime = month.bedTimes.reduce((sum, time) => sum + time, 0) / month.bedTimes.length;
+        month.avgBedTime = Math.round(avgBedTime);
+        
+        // Calculate standard deviation for consistency
+        const bedTimeVariance = month.bedTimes.reduce((sum, time) => {
+          const diff = time - avgBedTime;
+          return sum + (diff * diff);
+        }, 0) / month.bedTimes.length;
+        
+        month.bedTimeDeviation = Math.round(Math.sqrt(bedTimeVariance));
+      }
+      
+      // Calculate wake time average and consistency
+      if (month.wakeTimes.length > 0) {
+        // Calculate average wake time
+        const avgWakeTime = month.wakeTimes.reduce((sum, time) => sum + time, 0) / month.wakeTimes.length;
+        month.avgWakeTime = Math.round(avgWakeTime);
+        
+        // Calculate standard deviation for consistency
+        const wakeTimeVariance = month.wakeTimes.reduce((sum, time) => {
+          const diff = time - avgWakeTime;
+          return sum + (diff * diff);
+        }, 0) / month.wakeTimes.length;
+        
+        month.wakeTimeDeviation = Math.round(Math.sqrt(wakeTimeVariance));
+      }
+      
+      // Calculate overall sleep score (0-100)
+      if (month.daysWithSleepData > 0) {
+        let sleepScore = 0;
+        
+        // Component 1: Average sleep duration (40 points max)
+        // Optimal sleep is 7-9 hours (420-540 minutes)
+        if (month.avgSleepDuration) {
+          const avgDuration = month.avgSleepDuration;
+          if (avgDuration >= 420 && avgDuration <= 540) {
+            sleepScore += 40; // Optimal range
+          } else if (avgDuration >= 360 && avgDuration < 420) {
+            sleepScore += 30; // Slightly low
+          } else if (avgDuration > 540 && avgDuration <= 600) {
+            sleepScore += 30; // Slightly high
+          } else if (avgDuration >= 300 && avgDuration < 360) {
+            sleepScore += 20; // Low
+          } else if (avgDuration > 600) {
+            sleepScore += 20; // High
+          } else {
+            sleepScore += 10; // Very low
+          }
+        }
+        
+        // Component 2: Sleep consistency (30 points max)
+        // Lower deviation from average bedtime is better
+        if (month.bedTimeDeviation !== null) {
+          const avgDeviation = month.bedTimeDeviation;
+          if (avgDeviation <= 15) {
+            sleepScore += 30; // Very consistent (within 15 min)
+          } else if (avgDeviation <= 30) {
+            sleepScore += 25; // Consistent (within 30 min)
+          } else if (avgDeviation <= 45) {
+            sleepScore += 20; // Fairly consistent (within 45 min)
+          } else if (avgDeviation <= 60) {
+            sleepScore += 15; // Somewhat inconsistent (within 1 hour)
+          } else if (avgDeviation <= 90) {
+            sleepScore += 10; // Inconsistent (within 1.5 hours)
+          } else {
+            sleepScore += 5; // Very inconsistent (more than 1.5 hours)
+          }
+        }
+        
+        // Component 3: Sleep quality (30 points max)
+        // Based on quality ratings and bad sleep days
+        const qualityDistribution = month.qualityDistribution;
+        let qualityScore = 0;
+        
+        // Check for quality ratings
+        if (month.daysWithQualityRating > 0) {
+          const excellentDays = qualityDistribution.excellent || 0;
+          const goodDays = qualityDistribution.good || 0;
+          const fairDays = qualityDistribution.fair || 0;
+          const poorDays = qualityDistribution.poor || 0;
+          
+          qualityScore = ((excellentDays * 30) + (goodDays * 22) + (fairDays * 15) + (poorDays * 7)) / 
+                          month.daysWithQualityRating;
+        }
+        
+        // Penalize for bad sleep days
+        const badSleepRatio = month.badSleepDays / month.daysWithSleepData;
+        qualityScore = Math.max(0, qualityScore - (badSleepRatio * 10));
+        
+        sleepScore += qualityScore;
+        
+        // Adjust for tracking completeness
+        const trackingCompleteness = (month.daysWithCompleteTiming + month.daysWithQualityRating) / (month.daysWithSleepData * 2);
+        sleepScore = sleepScore * Math.min(1, trackingCompleteness + 0.5);
+        
+        month.avgSleepScore = Math.round(sleepScore);
+      }
+      
+      // Sort daily data chronologically
+      month.dailySleepData.sort((a, b) => {
+        return a.date.localeCompare(b.date);
+      });
+      
+      // Format time data in human-readable format for display
+      const formatMinutesToTime = (minutes) => {
+        if (minutes === null || minutes === undefined) return null;
+        
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      };
+      
+      if (month.avgBedTime !== null) {
+        month.formattedAvgBedTime = formatMinutesToTime(month.avgBedTime);
+      }
+      
+      if (month.avgWakeTime !== null) {
+        month.formattedAvgWakeTime = formatMinutesToTime(month.avgWakeTime);
+      }
+      
+      // Format sleep duration in hours and minutes
+      if (month.avgSleepDuration !== null) {
+        const hours = Math.floor(month.avgSleepDuration / 60);
+        const mins = month.avgSleepDuration % 60;
+        
+        if (mins === 0) {
+          month.formattedAvgSleepDuration = `${hours}h`;
+        } else {
+          month.formattedAvgSleepDuration = `${hours}h ${mins}m`;
+        }
+      }
+    });
+
+    // Convert to array and sort by most recent month first
+    const monthlyResults = Object.entries(monthlyData).map(([key, data]) => {
+      return {
+        monthKey: key,
+        ...data
+      };
+    }).sort((a, b) => {
+      return b.monthKey.localeCompare(a.monthKey);
+    });
+
+    // Calculate 6-month summary statistics
+    const sixMonthSummary = {
+      // Overall averages
+      avgSleepDuration: null,
+      avgBedTime: null,
+      avgWakeTime: null,
+      
+      // Consistency metrics
+      avgBedTimeDeviation: null,
+      avgWakeTimeDeviation: null,
+      
+      // Quality metrics
+      avgSleepScore: null,
+      badSleepDaysPercentage: null,
+      qualityDistribution: {
+        excellent: 0,
+        good: 0,
+        fair: 0,
+        poor: 0
+      },
+      
+      // Tracking statistics
+      totalDaysTracked: 0,
+      totalDaysWithSleepData: 0,
+      trackingAdherence: null,
+      
+      // Recommendations based on analysis
+      recommendations: []
+    };
+    
+    // Calculate overall averages across all months with data
+    let totalSleepMinutes = 0;
+    let totalDaysWithSleepDuration = 0;
+    let totalBedTimeDeviation = 0;
+    let totalDaysWithBedTime = 0;
+    let totalWakeTimeDeviation = 0;
+    let totalDaysWithWakeTime = 0;
+    let totalSleepScore = 0;
+    let totalDaysWithSleepScore = 0;
+    let totalBadSleepDays = 0;
+    
+    // Accumulate data for quality distribution
+    let totalExcellentDays = 0;
+    let totalGoodDays = 0;
+    let totalFairDays = 0;
+    let totalPoorDays = 0;
+    let totalDaysWithQualityRating = 0;
+    
+    // Process each month's data
+    monthlyResults.forEach(month => {
+      sixMonthSummary.totalDaysTracked += month.daysTracked;
+      sixMonthSummary.totalDaysWithSleepData += month.daysWithSleepData;
+      
+      if (month.avgSleepDuration) {
+        totalSleepMinutes += month.avgSleepDuration * month.daysWithSleepData;
+        totalDaysWithSleepDuration += month.daysWithSleepData;
+      }
+      
+      if (month.bedTimeDeviation) {
+        totalBedTimeDeviation += month.bedTimeDeviation * month.bedTimes.length;
+        totalDaysWithBedTime += month.bedTimes.length;
+      }
+      
+      if (month.wakeTimeDeviation) {
+        totalWakeTimeDeviation += month.wakeTimeDeviation * month.wakeTimes.length;
+        totalDaysWithWakeTime += month.wakeTimes.length;
+      }
+      
+      if (month.avgSleepScore) {
+        totalSleepScore += month.avgSleepScore * month.daysWithSleepData;
+        totalDaysWithSleepScore += month.daysWithSleepData;
+      }
+      
+      totalBadSleepDays += month.badSleepDays;
+      
+      // Accumulate quality distribution data
+      totalExcellentDays += month.qualityDistribution.excellent || 0;
+      totalGoodDays += month.qualityDistribution.good || 0;
+      totalFairDays += month.qualityDistribution.fair || 0;
+      totalPoorDays += month.qualityDistribution.poor || 0;
+      totalDaysWithQualityRating += month.daysWithQualityRating;
+    });
+    
+    // Calculate 6-month averages
+    if (totalDaysWithSleepDuration > 0) {
+      sixMonthSummary.avgSleepDuration = Math.round(totalSleepMinutes / totalDaysWithSleepDuration);
+      
+      // Format the sleep duration
+      const hours = Math.floor(sixMonthSummary.avgSleepDuration / 60);
+      const mins = sixMonthSummary.avgSleepDuration % 60;
+      
+      if (mins === 0) {
+        sixMonthSummary.formattedAvgSleepDuration = `${hours}h`;
+      } else {
+        sixMonthSummary.formattedAvgSleepDuration = `${hours}h ${mins}m`;
+      }
+    }
+    
+    if (totalDaysWithBedTime > 0) {
+      sixMonthSummary.avgBedTimeDeviation = Math.round(totalBedTimeDeviation / totalDaysWithBedTime);
+    }
+    
+    if (totalDaysWithWakeTime > 0) {
+      sixMonthSummary.avgWakeTimeDeviation = Math.round(totalWakeTimeDeviation / totalDaysWithWakeTime);
+    }
+    
+    if (totalDaysWithSleepScore > 0) {
+      sixMonthSummary.avgSleepScore = Math.round(totalSleepScore / totalDaysWithSleepScore);
+    }
+    
+    if (sixMonthSummary.totalDaysWithSleepData > 0) {
+      sixMonthSummary.badSleepDaysPercentage = Math.round((totalBadSleepDays / sixMonthSummary.totalDaysWithSleepData) * 100);
+    }
+    
+    if (sixMonthSummary.totalDaysTracked > 0) {
+      sixMonthSummary.trackingAdherence = Math.round((sixMonthSummary.totalDaysWithSleepData / sixMonthSummary.totalDaysTracked) * 100);
+    }
+    
+    // Calculate quality distribution percentages
+    if (totalDaysWithQualityRating > 0) {
+      sixMonthSummary.qualityDistribution = {
+        excellent: Math.round((totalExcellentDays / totalDaysWithQualityRating) * 100),
+        good: Math.round((totalGoodDays / totalDaysWithQualityRating) * 100),
+        fair: Math.round((totalFairDays / totalDaysWithQualityRating) * 100),
+        poor: Math.round((totalPoorDays / totalDaysWithQualityRating) * 100)
+      };
+    }
+    
+    // Find consistent bedtime and wake time patterns
+    const findConsistentTimePatterns = () => {
+      // Calculate average bedtime and wake time across all months
+      const monthsWithBedTime = monthlyResults.filter(month => month.avgBedTime !== null);
+      const monthsWithWakeTime = monthlyResults.filter(month => month.avgWakeTime !== null);
+      
+      if (monthsWithBedTime.length > 0) {
+        // Calculate weighted average bedtime
+        let totalWeightedBedTime = 0;
+        let totalBedTimeSamples = 0;
+        
+        monthsWithBedTime.forEach(month => {
+          totalWeightedBedTime += month.avgBedTime * month.bedTimes.length;
+          totalBedTimeSamples += month.bedTimes.length;
+        });
+        
+        const overallAvgBedTime = Math.round(totalWeightedBedTime / totalBedTimeSamples);
+        sixMonthSummary.avgBedTime = overallAvgBedTime;
+        
+        // Format the bedtime
+        const hours = Math.floor(overallAvgBedTime / 60);
+        const mins = overallAvgBedTime % 60;
+        sixMonthSummary.formattedAvgBedTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      }
+      
+      if (monthsWithWakeTime.length > 0) {
+        // Calculate weighted average wake time
+        let totalWeightedWakeTime = 0;
+        let totalWakeTimeSamples = 0;
+        
+        monthsWithWakeTime.forEach(month => {
+          totalWeightedWakeTime += month.avgWakeTime * month.wakeTimes.length;
+          totalWakeTimeSamples += month.wakeTimes.length;
+        });
+        
+        const overallAvgWakeTime = Math.round(totalWeightedWakeTime / totalWakeTimeSamples);
+        sixMonthSummary.avgWakeTime = overallAvgWakeTime;
+        
+        // Format the wake time
+        const hours = Math.floor(overallAvgWakeTime / 60);
+        const mins = overallAvgWakeTime % 60;
+        sixMonthSummary.formattedAvgWakeTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      }
+    };
+    
+    findConsistentTimePatterns();
+    
+    // Generate recommendations based on the data
+    const generateRecommendations = () => {
+      const recommendations = [];
+      
+      // Only generate recommendations if we have enough data
+      if (sixMonthSummary.totalDaysWithSleepData < 14) {
+        recommendations.push("Track your sleep more consistently to receive personalized recommendations.");
+        return recommendations;
+      }
+      
+      // Sleep duration recommendations
+      if (sixMonthSummary.avgSleepDuration) {
+        if (sixMonthSummary.avgSleepDuration < 420) {
+          recommendations.push("Your average sleep duration is below the recommended 7 hours. Try to go to bed earlier or wake up later to increase your sleep time.");
+        } else if (sixMonthSummary.avgSleepDuration > 540) {
+          recommendations.push("Your average sleep duration exceeds 9 hours. While this might be appropriate for your needs, consider if you're spending too much time in bed.");
+        } else {
+          recommendations.push("Your average sleep duration is within the recommended 7-9 hour range. Keep maintaining this healthy sleep schedule.");
+        }
+      }
+      
+      // Sleep consistency recommendations
+      if (sixMonthSummary.avgBedTimeDeviation) {
+        if (sixMonthSummary.avgBedTimeDeviation > 60) {
+          recommendations.push("Your bedtime varies significantly (by over an hour on average). Try to establish a more consistent sleep schedule, going to bed at the same time each night.");
+        } else if (sixMonthSummary.avgBedTimeDeviation > 30) {
+          recommendations.push("Your bedtime varies by about 30-60 minutes on average. Aim for more consistency by setting a regular bedtime routine.");
+        } else {
+          recommendations.push("You maintain a consistent bedtime schedule, which is excellent for your sleep health.");
+        }
+      }
+      
+      // Sleep quality recommendations
+      if (sixMonthSummary.badSleepDaysPercentage > 25) {
+        recommendations.push(`You reported poor sleep quality for ${sixMonthSummary.badSleepDaysPercentage}% of days. Consider reviewing your sleep environment, reducing caffeine intake, or consulting a healthcare provider.`);
+      }
+      
+      // Tracking recommendations
+      if (sixMonthSummary.trackingAdherence < 50) {
+        recommendations.push(`You're tracking sleep for only ${sixMonthSummary.trackingAdherence}% of days. More consistent tracking will provide better insights into your sleep patterns.`);
+      }
+      
+      // Add general recommendation if none were generated
+      if (recommendations.length === 0) {
+        recommendations.push("Your sleep patterns look good. Continue maintaining your healthy sleep habits and consistent tracking.");
+      }
+      
+      return recommendations;
+    };
+    
+    sixMonthSummary.recommendations = generateRecommendations();
+    
+    // Calculate trends (month-over-month changes)
+    if (monthlyResults.length >= 2) {
+      // Get the two most recent months with data
+      const recentMonths = monthlyResults
+        .filter(month => month.daysWithSleepData > 0)
+        .slice(0, 2);
+      
+      if (recentMonths.length === 2) {
+        const current = recentMonths[0];
+        const previous = recentMonths[1];
+        
+        sixMonthSummary.trends = {
+          sleepDuration: current.avgSleepDuration && previous.avgSleepDuration ? {
+            value: current.avgSleepDuration - previous.avgSleepDuration,
+            percentage: previous.avgSleepDuration > 0 
+              ? Math.round(((current.avgSleepDuration - previous.avgSleepDuration) / previous.avgSleepDuration) * 100) 
+              : 0
+          } : null,
+          sleepScore: current.avgSleepScore && previous.avgSleepScore ? {
+            value: current.avgSleepScore - previous.avgSleepScore,
+            percentage: previous.avgSleepScore > 0 
+              ? Math.round(((current.avgSleepScore - previous.avgSleepScore) / previous.avgSleepScore) * 100) 
+              : 0
+          } : null,
+          consistency: current.bedTimeDeviation && previous.bedTimeDeviation ? {
+            value: previous.bedTimeDeviation - current.bedTimeDeviation, // Note: lower deviation is better
+            percentage: previous.bedTimeDeviation > 0
+              ? Math.round(((previous.bedTimeDeviation - current.bedTimeDeviation) / previous.bedTimeDeviation) * 100)
+              : 0
+          } : null
+        };
+      }
+    }
+
+    res.json({ 
+      months: monthlyResults,
+      summary: sixMonthSummary
+    });
+  } catch (err) {
+    console.error('Error fetching monthly sleep data:', err);
+    res.status(500).json({ error: 'Error fetching monthly sleep data: ' + err.message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
